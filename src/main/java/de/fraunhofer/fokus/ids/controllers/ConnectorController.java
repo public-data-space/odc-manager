@@ -1,13 +1,18 @@
 package de.fraunhofer.fokus.ids.controllers;
 
-import de.fraunhofer.fokus.ids.models.IDSMetadata;
-import de.fraunhofer.fokus.ids.models.ReturnObject;
+import de.fraunhofer.fokus.ids.enums.FileType;
+import de.fraunhofer.fokus.ids.messages.ResourceRequest;
+import de.fraunhofer.fokus.ids.models.*;
+import de.fraunhofer.fokus.ids.persistence.entities.DataAsset;
+import de.fraunhofer.fokus.ids.persistence.entities.DataSource;
+import de.fraunhofer.fokus.ids.persistence.enums.DatasourceType;
 import de.fraunhofer.fokus.ids.persistence.managers.DataAssetManager;
+import de.fraunhofer.fokus.ids.persistence.managers.DataSourceManager;
 import de.fraunhofer.fokus.ids.services.IDSService;
-import de.fraunhofer.fokus.ids.models.ContentTypeWrapper;
-import de.fraunhofer.fokus.ids.models.DataRequest;
+import de.fraunhofer.fokus.ids.services.webclient.WebClientService;
 import io.vertx.core.*;
 import io.vertx.core.json.Json;
+import io.vertx.core.json.JsonObject;
 import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
 import org.apache.http.HttpEntity;
@@ -26,10 +31,14 @@ public class ConnectorController {
 	private Logger LOGGER = LoggerFactory.getLogger(ConnectorController.class.getName());
 	private IDSService idsService;
 	private DataAssetManager dataAssetManager;
+	private DataSourceManager dataSourceManager;
+	private WebClientService webClientService;
 
 	public ConnectorController(Vertx vertx){
 		this.idsService = new IDSService(vertx);
 		this.dataAssetManager = new DataAssetManager(vertx);
+		this.dataSourceManager = new DataSourceManager(vertx);
+		this.webClientService = WebClientService.createProxy(vertx, Constants.WEBCLIENT_SERVICE);
 	}
 
 	public void data(DataRequest dataRequest, Handler<AsyncResult<ReturnObject>> resultHandler) {
@@ -42,7 +51,7 @@ public class ConnectorController {
 	}
 
 	public void about(String extension, Handler<AsyncResult<ReturnObject>> resultHandler) {
-		ContentTypeWrapper contentTypeWrapper = getContentTypeWrapper(extension);
+		ContentTypeWrapper contentTypeWrapper = getContentTypeWrapper(FileType.valueOf(extension.toUpperCase()));
 		idsService.getConnector( reply -> {
 			if (reply.succeeded()) {
 				ContentBody cb = new StringBody(Json.encodePrettily(idsService.getSelfDescriptionResponse()), ContentType.create("application/json"));
@@ -72,39 +81,60 @@ public class ConnectorController {
 	}
 
 	private void payload(Long id, Handler<AsyncResult<ReturnObject>> resultHandler) {
-		getPayload(id, "multi", resultHandler);
+		getPayload(id, FileType.MULTIPART, resultHandler);
 	}
 
 	private void payloadContent(Long id, String extension, Handler<AsyncResult<ReturnObject>> resultHandler) {
 		if(extension.equals("json")) {
-			getPayload(id, "json", resultHandler);
+			getPayload(id, FileType.JSON, resultHandler);
 		}
 		if(extension.equals("txt")) {
-			getPayload(id, "txt", resultHandler);
+			getPayload(id, FileType.TXT, resultHandler);
 		}
-		getPayload(id, "multi", resultHandler);
+		getPayload(id, FileType.MULTIPART, resultHandler);
 	}
 
-	private void getPayload(Long id, String extension, Handler<AsyncResult<ReturnObject>> resultHandler) {
+	private void getPayload(Long id, FileType fileType, Handler<AsyncResult<ReturnObject>> resultHandler) {
 
 		dataAssetManager.findById(id, reply -> {
 			if (reply.succeeded()) {
+				DataAsset dataAsset = Json.decodeValue(reply.result().toString(), DataAsset.class);
 
-				//TODO Get file Content from ADAPTER
+				dataSourceManager.findById(Long.parseLong(dataAsset.getSourceID()), reply2 -> {
+					if(reply2.succeeded()){
+						DataSource dataSource = Json.decodeValue(reply2.result().toString(), DataSource.class);
 
-//				fileContentFuture.setHandler( br -> {
-//					if(br.succeeded()) {
-//						if(extension.equals("json")) {
-//							getJSON(br.result(), resultHandler);
-//						} else {
-//							getMultiPart(br.result(), extension, resultHandler);
-//						}
-//					}
-//					else {
-//						LOGGER.error("FileContent could not be read.\n\n"+br.cause());
-//						resultHandler.handle(Future.failedFuture(""));
-//					}
-//				});
+						ResourceRequest request = new ResourceRequest();
+						request.setDataSource(dataSource);
+						request.setDataAsset(dataAsset);
+						request.setFileType(fileType);
+
+						if(dataSource.getDatasourceType().equals(DatasourceType.CKAN)){
+
+
+							webClientService.post(8091,"localhost","/getFile", new JsonObject(Json.encode(request)), reply3 -> {
+								if(reply3.succeeded()){
+									if(fileType.equals(FileType.JSON)) {
+										getJSON(reply3.result().getString("result"), resultHandler);
+									} else {
+										getMultiPart(reply3.result().toString(), fileType, resultHandler);
+									}
+								}
+								else{
+									LOGGER.info("FileContent could not be retrieved.\n\n"+reply3.cause());
+									resultHandler.handle(Future.failedFuture(reply3.cause()));
+								}
+							});
+						}
+						else{
+							//TODO Postgres
+						}
+					}
+					else{
+						LOGGER.info("DataAsset could not be retrieved.\n\n"+reply2.cause());
+						resultHandler.handle(Future.failedFuture(reply2.cause()));
+					}
+				});
 			}
 			else {
 				LOGGER.error("DataAsset could not be read.\n\n"+reply.cause());
@@ -122,7 +152,7 @@ public class ConnectorController {
 		resultHandler.handle(Future.succeededFuture(returnObject));
 	}
 
-	private void getMultiPart(String fileContent, String extension, Handler<AsyncResult<ReturnObject>> resultHandler) {
+	private void getMultiPart(String fileContent, FileType fileType, Handler<AsyncResult<ReturnObject>> resultHandler) {
 		ContentBody	cb = new StringBody(Json.encode(idsService.getSelfDescriptionResponse()), ContentType.create("application/json"));
 		MultipartEntityBuilder multipartEntityBuilder = MultipartEntityBuilder.create()
 				.setBoundary("IDSMSGPART")
@@ -130,10 +160,10 @@ public class ConnectorController {
 				.addPart("header", cb)
 				.addTextBody("payload", fileContent, ContentType.create("text/plain", StandardCharsets.UTF_8));
 
-		if(extension.equals("multi")) {
+		if(fileType.equals(FileType.MULTIPART)) {
 			multipartEntityBuilder.setContentType(ContentType.create("multipart/mixed"));
 		}
-		if(extension.equals("txt")) {
+		if(fileType.equals(FileType.TXT)) {
 			multipartEntityBuilder.setContentType(ContentType.create("text/plain"));
 		}
 
@@ -149,14 +179,14 @@ public class ConnectorController {
 		resultHandler.handle(Future.succeededFuture(returnObject));
 	}
 
-	private ContentTypeWrapper getContentTypeWrapper(String extension) {
-		if(extension.equals(".ttl")) {
+	private ContentTypeWrapper getContentTypeWrapper(FileType fileType) {
+		if(fileType.equals(FileType.TTL)) {
 			return new ContentTypeWrapper("text/turtle", "TTL");
 		}
-		if(extension.equals(".jsonld")) {
+		if(fileType.equals(FileType.JSONLD)) {
 			return new ContentTypeWrapper("application/ld+json", "JSON-LD");
 		}
-		if(extension.equals(".rdf")) {
+		if(fileType.equals(FileType.RDF)) {
 			return new ContentTypeWrapper("application/rdf+xml", "RDF/XML");
 		}
 		return new ContentTypeWrapper("text/plain; charset=utf-8", "TTL");

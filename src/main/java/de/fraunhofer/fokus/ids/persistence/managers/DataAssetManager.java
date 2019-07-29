@@ -105,8 +105,8 @@ public class DataAssetManager {
 
 		String update = "INSERT INTO DataAsset (created_at, updated_at, datasetid, name, url, format, licenseurl, "
 				+ "licensetitle, datasettitle, datasetnotes, orignalresourceurl, orignaldataseturl, "
-				+ "accessinformation, signature, status, resourceid, tags, datasetdescription, organizationtitle, "
-				+ "organizationdescription, version, sourceid) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+				+ "signature, status, resourceid, tags, datasetdescription, organizationtitle, "
+				+ "organizationdescription, version, sourceid) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 		Date d = new Date();
 		JsonArray params = new JsonArray()
 				.add(d.toInstant())
@@ -121,7 +121,6 @@ public class DataAssetManager {
 				.add(checkNull(dataAsset.getDatasetNotes()))
 				.add(checkNull(dataAsset.getOrignalResourceURL()))
 				.add(checkNull(dataAsset.getOrignalDatasetURL()))
-				.add(checkNull(dataAsset.getAccessInformation()))
 				.add(checkNull(dataAsset.getSignature()))
 				.add(dataAsset.getStatus() == null ? DataAssetStatus.UNAPPROVED.ordinal() : dataAsset.getStatus().ordinal())
 				.add(checkNull(dataAsset.getResourceID()))

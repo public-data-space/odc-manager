@@ -278,7 +278,7 @@ public class IDSService {
 			e = new StaticEndpointBuilder(new URL(getPayloadURL(da.getId())+"#ResourceEndpoint"))
 					._endpointArtifact_(new ArtifactBuilder(new URL(getPayloadURL(da.getId())+"#Artifact"))
 							._creationDate_(getDate(da.getCreatedAt()))
-							._fileName_(da.getAccessInformation())
+							._fileName_(da.getResourceID())
 							.build())
 					._endpointHost_(new HostBuilder(new URL(getPayloadURL(da.getId())+"#Host"))
 							._accessUrl_(new URI(getPayloadURL(da.getId())))

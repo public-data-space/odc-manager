@@ -113,6 +113,17 @@ public class DataSourceManager {
         });
     }
 
+    public void findTypeById(Long id, Handler<AsyncResult<Long>> resultHandler) {
+        dbService.query("SELECT datasourcetype FROM DataSource WHERE id = ?", new JsonArray().add(id), reply -> {
+            if (reply.failed()) {
+                LOGGER.info(reply.cause());
+                resultHandler.handle(Future.failedFuture(reply.cause().toString()));
+            } else {
+                resultHandler.handle(Future.succeededFuture(reply.result().get(0).getLong("datasourcetype")));
+            }
+        });
+    }
+
     public void findAllByType(Handler<AsyncResult<JsonObject>> resultHandler) {
         dbService.query( "SELECT * FROM DataSource ORDER BY datasourcetype" ,new JsonArray(), reply -> {
             if (reply.failed()) {

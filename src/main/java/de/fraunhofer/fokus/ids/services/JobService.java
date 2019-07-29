@@ -30,9 +30,9 @@ public class JobService extends AbstractVerticle {
 
 
 	public JobService(Vertx vertx){
-		jobManager = new JobManager(vertx);
-		dataAssetManager = new DataAssetManager(vertx);
-		dataSourceManager = new DataSourceManager(vertx);
+		this.jobManager = new JobManager(vertx);
+		this.dataAssetManager = new DataAssetManager(vertx);
+		this.dataSourceManager = new DataSourceManager(vertx);
 		this.webClientService = WebClientService.createProxy(vertx, Constants.WEBCLIENT_SERVICE);
 
 	}
