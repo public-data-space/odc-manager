@@ -2,7 +2,6 @@ package de.fraunhofer.fokus.ids.persistence.managers;
 
 import de.fraunhofer.fokus.ids.models.Constants;
 import de.fraunhofer.fokus.ids.persistence.entities.DataSource;
-import de.fraunhofer.fokus.ids.persistence.enums.DatasourceType;
 import de.fraunhofer.fokus.ids.persistence.service.DatabaseService;
 import io.vertx.core.*;
 import io.vertx.core.json.JsonArray;
@@ -33,7 +32,7 @@ public class DataSourceManager {
                 .add(d.toInstant())
                 .add(checkNull(dataSource.getDatasourceName()))
                 .add(dataSource.getData())
-                .add(dataSource.getDatasourceType().ordinal())
+                .add(dataSource.getDatasourceType())
                 .add(dataSource.getId());
 
         dbService.update(update, params, reply -> {
@@ -57,7 +56,7 @@ public class DataSourceManager {
                 .add(d.toInstant())
                 .add(checkNull(dataSource.getDatasourceName()))
                 .add(dataSource.getData().toString())
-                .add(dataSource.getDatasourceType().ordinal());
+                .add(dataSource.getDatasourceType());
 
         dbService.update(update, params, reply -> {
             if (reply.failed()) {
@@ -80,8 +79,8 @@ public class DataSourceManager {
         });
     }
 
-    public void findByType(DatasourceType type, Handler<AsyncResult<JsonArray>> resultHandler) {
-        dbService.query("SELECT * FROM DataSource WHERE datasourcetype=?",new JsonArray().add(type.ordinal()), reply -> {
+    public void findByType(String type, Handler<AsyncResult<JsonArray>> resultHandler) {
+        dbService.query("SELECT * FROM DataSource WHERE datasourcetype=?",new JsonArray().add(type), reply -> {
             if (reply.failed()) {
                 LOGGER.info(reply.cause());
                 resultHandler.handle(Future.failedFuture(reply.cause().toString()));
@@ -132,12 +131,11 @@ public class DataSourceManager {
             } else {
 
                 JsonObject res = new JsonObject();
-                for(DatasourceType t : DatasourceType.values()){
-                    res.put(t.name(), new JsonArray());
-                }
                 for(JsonObject jsonObject : reply.result()){
-                    String currentType = DatasourceType.values()[jsonObject.getLong("datasourcetype").intValue()].name();
-                    res.getJsonArray(currentType).add(jsonObject);
+                    if(!res.containsKey(jsonObject.getString("datasourcetype"))){
+                        res.put(jsonObject.getString("datasourcetype"), new JsonArray());
+                    }
+                    res.getJsonArray(jsonObject.getString("datasourcetype")).add(jsonObject);
                 }
                 resultHandler.handle(Future.succeededFuture(res));
             }

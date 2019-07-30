@@ -34,7 +34,7 @@ public class JobManager {
 				.add(new JsonObject((dataAssetDescription.getData().isEmpty() ? new HashMap<>() : dataAssetDescription.getData())).toString())
 				.add(JobStatus.CREATED.ordinal())
 				.add(dataAssetDescription.getSourceId())
-				.add(dataAssetDescription.getDatasourcetype().ordinal());
+				.add(dataAssetDescription.getDatasourcetype());
 
 		dbService.update(update, params, reply -> {
 			if (reply.failed()) {

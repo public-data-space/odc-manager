@@ -8,16 +8,15 @@ import de.fraunhofer.fokus.ids.models.DataAssetDescription;
 import de.fraunhofer.fokus.ids.models.DataRequest;
 import de.fraunhofer.fokus.ids.models.ReturnObject;
 import de.fraunhofer.fokus.ids.persistence.entities.DataSource;
-import de.fraunhofer.fokus.ids.persistence.enums.DatasourceType;
 import de.fraunhofer.fokus.ids.persistence.managers.AuthManager;
 import de.fraunhofer.fokus.ids.persistence.service.DatabaseServiceVerticle;
-import de.fraunhofer.fokus.ids.services.webclient.WebClientService;
-import de.fraunhofer.fokus.ids.services.webclient.WebClientServiceVerticle;
+import de.fraunhofer.fokus.ids.services.datasourceAdapter.DataSourceAdapterServiceVerticle;
 import io.vertx.core.*;
 import io.vertx.core.http.HttpMethod;
 import io.vertx.core.http.HttpServer;
 import io.vertx.core.http.HttpServerResponse;
 import io.vertx.core.json.Json;
+import io.vertx.core.json.JsonObject;
 import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
 import io.vertx.ext.web.Router;
@@ -50,9 +49,9 @@ public class MainVerticle extends AbstractVerticle{
 		deploymentOptions.setWorker(true);
 
 		vertx.deployVerticle( DatabaseServiceVerticle.class.getName(),deploymentOptions,  reply-> LOGGER.info("DataBaseService started"));
-		vertx.deployVerticle( WebClientServiceVerticle.class.getName(),deploymentOptions, reply-> {
+		vertx.deployVerticle( DataSourceAdapterServiceVerticle.class.getName(),deploymentOptions, reply-> {
 			if(reply.succeeded()){
-				LOGGER.info("WebClientService started");
+				LOGGER.info("DataSourceAdapterService started");
 			}
 			else{
 				LOGGER.info(reply.cause());
@@ -157,17 +156,15 @@ public class MainVerticle extends AbstractVerticle{
 //						getUri(result -> reply(result, routingContext.response()), routingContext)
 //				);
 
-		router.post("/datasources/add/").handler(routingContext ->
-				dataSourceController.add(Json.decodeValue(routingContext.getBodyAsJson().toString(), DataSource.class), result -> reply(result, routingContext.response())));
+		router.post("/datasources/add/").handler(routingContext -> {
+				dataSourceController.add(toDataSource(routingContext.getBodyAsJson()), result -> reply(result, routingContext.response()));
+				});
 
 		router.route("/datasources/delete/:id").handler(routingContext ->
 				dataSourceController.delete(Long.parseLong(routingContext.request().getParam("id")), result -> reply(result, routingContext.response())));
 
 		router.route("/datasources/findAll").handler(routingContext ->
 				dataSourceController.findAllByType(result -> reply(result, routingContext.response())));
-
-		router.route("/datasources/find/:type").handler(routingContext ->
-				dataSourceController.findByType(DatasourceType.values()[Integer.parseInt(routingContext.request().getParam("type"))], result -> reply(result, routingContext.response())));
 
 		router.route("/datasources/find/id/:id").handler(routingContext ->
 				dataSourceController.findById(Long.parseLong(routingContext.request().getParam("id")), result -> reply(result, routingContext.response())));
@@ -177,6 +174,15 @@ public class MainVerticle extends AbstractVerticle{
 
 		server.requestHandler(router).listen(8090);
 		LOGGER.info("odc-manager deployed on localhost:8090");
+	}
+
+	//TODO: WORKAROUND. Find way to use Json.deserialize()
+	private DataSource toDataSource(JsonObject bodyAsJson) {
+		DataSource ds = new DataSource();
+		ds.setData(bodyAsJson.getJsonObject("data"));
+		ds.setDatasourceName(bodyAsJson.getString("datasourcename"));
+		ds.setDatasourceType(bodyAsJson.getString("datasourcetype"));
+		return ds;
 	}
 
 	private void reply(Object result, HttpServerResponse response) {

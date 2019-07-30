@@ -5,11 +5,10 @@ import de.fraunhofer.fokus.ids.messages.ResourceRequest;
 import de.fraunhofer.fokus.ids.models.*;
 import de.fraunhofer.fokus.ids.persistence.entities.DataAsset;
 import de.fraunhofer.fokus.ids.persistence.entities.DataSource;
-import de.fraunhofer.fokus.ids.persistence.enums.DatasourceType;
 import de.fraunhofer.fokus.ids.persistence.managers.DataAssetManager;
 import de.fraunhofer.fokus.ids.persistence.managers.DataSourceManager;
 import de.fraunhofer.fokus.ids.services.IDSService;
-import de.fraunhofer.fokus.ids.services.webclient.WebClientService;
+import de.fraunhofer.fokus.ids.services.datasourceAdapter.DataSourceAdapterService;
 import io.vertx.core.*;
 import io.vertx.core.json.Json;
 import io.vertx.core.json.JsonObject;
@@ -32,13 +31,13 @@ public class ConnectorController {
 	private IDSService idsService;
 	private DataAssetManager dataAssetManager;
 	private DataSourceManager dataSourceManager;
-	private WebClientService webClientService;
+	private DataSourceAdapterService dataSourceAdapterService;
 
 	public ConnectorController(Vertx vertx){
 		this.idsService = new IDSService(vertx);
 		this.dataAssetManager = new DataAssetManager(vertx);
 		this.dataSourceManager = new DataSourceManager(vertx);
-		this.webClientService = WebClientService.createProxy(vertx, Constants.WEBCLIENT_SERVICE);
+		this.dataSourceAdapterService = DataSourceAdapterService.createProxy(vertx, Constants.DATASOURCEADAPTER_SERVICE);
 	}
 
 	public void data(DataRequest dataRequest, Handler<AsyncResult<ReturnObject>> resultHandler) {
@@ -74,7 +73,7 @@ public class ConnectorController {
 				resultHandler.handle(Future.succeededFuture(new ReturnObject(out.toString(), contentTypeWrapper)));
 			}
 			else {
-				LOGGER.error("Connector Object could not be retrieved.\n\n"+reply.cause());
+				LOGGER.error("Connector Object could not be retrieved.",reply.cause());
 				resultHandler.handle(Future.failedFuture(reply.cause()));
 			}
 		});
@@ -109,35 +108,28 @@ public class ConnectorController {
 						request.setDataAsset(dataAsset);
 						request.setFileType(fileType);
 
-						if(dataSource.getDatasourceType().equals(DatasourceType.CKAN)){
-
-
-							webClientService.post(8091,"localhost","/getFile", new JsonObject(Json.encode(request)), reply3 -> {
-								if(reply3.succeeded()){
-									if(fileType.equals(FileType.JSON)) {
-										getJSON(reply3.result().getString("result"), resultHandler);
-									} else {
-										getMultiPart(reply3.result().toString(), fileType, resultHandler);
-									}
+						dataSourceAdapterService.getFile(dataSource.getDatasourceType(), new JsonObject(Json.encode(request)), reply3 -> {
+							if(reply3.succeeded()){
+								if(fileType.equals(FileType.JSON)) {
+									getJSON(reply3.result().getString("result"), resultHandler);
+								} else {
+									getMultiPart(reply3.result().toString(), fileType, resultHandler);
 								}
-								else{
-									LOGGER.info("FileContent could not be retrieved.\n\n"+reply3.cause());
-									resultHandler.handle(Future.failedFuture(reply3.cause()));
-								}
-							});
-						}
-						else{
-							//TODO Postgres
-						}
+							}
+							else{
+								LOGGER.info("FileContent could not be retrieved.",reply3.cause());
+								resultHandler.handle(Future.failedFuture(reply3.cause()));
+							}
+						});
 					}
 					else{
-						LOGGER.info("DataAsset could not be retrieved.\n\n"+reply2.cause());
+						LOGGER.info("DataAsset could not be retrieved.",reply2.cause());
 						resultHandler.handle(Future.failedFuture(reply2.cause()));
 					}
 				});
 			}
 			else {
-				LOGGER.error("DataAsset could not be read.\n\n"+reply.cause());
+				LOGGER.error("DataAsset could not be read.",reply.cause());
 				resultHandler.handle(Future.failedFuture(reply.cause()));
 			}
 		});

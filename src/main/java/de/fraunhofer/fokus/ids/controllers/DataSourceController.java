@@ -1,7 +1,6 @@
 package de.fraunhofer.fokus.ids.controllers;
 
 import de.fraunhofer.fokus.ids.persistence.entities.DataSource;
-import de.fraunhofer.fokus.ids.persistence.enums.DatasourceType;
 import de.fraunhofer.fokus.ids.persistence.managers.DataSourceManager;
 import io.vertx.core.*;
 import io.vertx.core.json.JsonArray;
@@ -123,7 +122,7 @@ public class DataSourceController {
         });
     }
 
-    public void findByType(DatasourceType type, Handler<AsyncResult<JsonArray>> resultHandler) {
+    public void findByType(String type, Handler<AsyncResult<JsonArray>> resultHandler) {
         dataSourceManager.findByType(type, reply -> {
             if (reply.succeeded()) {
                 resultHandler.handle(Future.succeededFuture(reply.result()));

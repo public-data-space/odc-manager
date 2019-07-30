@@ -1,14 +1,12 @@
 package de.fraunhofer.fokus.ids.models;
 
-import de.fraunhofer.fokus.ids.persistence.enums.DatasourceType;
-
 import java.util.Map;
 
 public class DataAssetDescription {
 
     private int sourceId;
     private Map data;
-    private DatasourceType datasourcetype;
+    private String datasourcetype;
 
     public int getSourceId() {
         return sourceId;
@@ -26,11 +24,11 @@ public class DataAssetDescription {
         this.data = data;
     }
 
-    public DatasourceType getDatasourcetype() {
+    public String getDatasourcetype() {
         return datasourcetype;
     }
 
-    public void setDatasourcetype(DatasourceType datasourcetype) {
+    public void setDatasourcetype(String datasourcetype) {
         this.datasourcetype = datasourcetype;
     }
 

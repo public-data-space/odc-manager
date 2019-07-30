@@ -5,17 +5,13 @@ import de.fraunhofer.fokus.ids.models.Constants;
 import de.fraunhofer.fokus.ids.persistence.entities.DataAsset;
 import de.fraunhofer.fokus.ids.persistence.entities.DataSource;
 import de.fraunhofer.fokus.ids.persistence.entities.Job;
-import de.fraunhofer.fokus.ids.persistence.enums.DatasourceType;
 import de.fraunhofer.fokus.ids.persistence.enums.JobStatus;
 import de.fraunhofer.fokus.ids.persistence.managers.DataAssetManager;
 import de.fraunhofer.fokus.ids.persistence.managers.DataSourceManager;
 import de.fraunhofer.fokus.ids.persistence.managers.JobManager;
-import de.fraunhofer.fokus.ids.services.webclient.WebClientService;
+import de.fraunhofer.fokus.ids.services.datasourceAdapter.DataSourceAdapterService;
 import io.vertx.core.*;
-import io.vertx.core.eventbus.EventBus;
-import io.vertx.core.eventbus.Message;
 import io.vertx.core.json.Json;
-import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
@@ -26,14 +22,14 @@ public class JobService extends AbstractVerticle {
 	private JobManager jobManager;
 	private DataAssetManager dataAssetManager;
 	private DataSourceManager dataSourceManager;
-	private WebClientService webClientService;
+	private DataSourceAdapterService dataSourceAdapterService;
 
 
 	public JobService(Vertx vertx){
 		this.jobManager = new JobManager(vertx);
 		this.dataAssetManager = new DataAssetManager(vertx);
 		this.dataSourceManager = new DataSourceManager(vertx);
-		this.webClientService = WebClientService.createProxy(vertx, Constants.WEBCLIENT_SERVICE);
+		this.dataSourceAdapterService = DataSourceAdapterService.createProxy(vertx, Constants.DATASOURCEADAPTER_SERVICE);
 
 	}
 
@@ -56,20 +52,17 @@ public class JobService extends AbstractVerticle {
 					jobManager.updateStatus(job.getId(), JobStatus.RUNNING, reply2 -> {
 					});
 
-					if (job.getSourceType().equals(DatasourceType.CKAN)) {
-						DataAssetCreateMessage mes = new DataAssetCreateMessage();
-						mes.setJob(job);
-						mes.setDataSource(reply.result());
-						webClientService.post(8091, "localhost", "/create", new JsonObject(Json.encode(mes)), reply3 -> {
-							if (reply3.succeeded()) {
-								next.handle(Future.succeededFuture(Json.decodeValue(reply3.result().toString(), DataAsset.class)));
-							} else {
-								LOGGER.info(reply3.cause());
-								next.handle(Future.failedFuture(reply3.cause()));
-							}
-						});
-					} else {
-					}
+					DataAssetCreateMessage mes = new DataAssetCreateMessage();
+					mes.setJob(job);
+					mes.setDataSource(reply.result());
+					dataSourceAdapterService.createDataAsset(reply.result().getDatasourceType(), new JsonObject(Json.encode(mes)), reply3 -> {
+						if (reply3.succeeded()) {
+							next.handle(Future.succeededFuture(Json.decodeValue(reply3.result().toString(), DataAsset.class)));
+						} else {
+							LOGGER.info(reply3.cause());
+							next.handle(Future.failedFuture(reply3.cause()));
+						}
+					});
 				} else {
 					LOGGER.info(reply.cause());
 					next.handle(Future.failedFuture(reply.cause()));
