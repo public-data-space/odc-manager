@@ -20,9 +20,9 @@ import java.util.Arrays;
 public class AuthManager {
 
     private Logger LOGGER = LoggerFactory.getLogger(AuthManager.class.getName());
-    JWTAuth provider;
+    private JWTAuth provider;
 
-    DatabaseService dbService;
+    private DatabaseService dbService;
 
     public AuthManager(Vertx vertx) {
         dbService = DatabaseService.createProxy(vertx, Constants.DATABASE_SERVICE);
@@ -31,6 +31,11 @@ public class AuthManager {
                         .setAlgorithm("HS256")
                         .setPublicKey("keyboard cat")
                         .setSymmetric(true)));
+
+    }
+
+    public JWTAuth getProvider(){
+        return provider;
     }
 
     public void login(JsonObject credentials, Handler<AsyncResult<String>> resultHandler) {
@@ -44,7 +49,7 @@ public class AuthManager {
                     User user = Json.decodeValue(reply.result().get(0).toString(), User.class);
 
                     if (BCrypt.checkpw(credentials.getString("password"), user.getPassword())) {
-                        resultHandler.handle(Future.succeededFuture(provider.generateToken(new JsonObject().put("sub", user.getUsername()), new JWTOptions())));
+                        resultHandler.handle(Future.succeededFuture(provider.generateToken(new JsonObject().put("sub", user.getUsername()), new JWTOptions().setExpiresInMinutes(10))));
                     } else {
                         resultHandler.handle(Future.failedFuture("Password is not identical to password in database."));
                     }

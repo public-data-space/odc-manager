@@ -22,6 +22,7 @@ import io.vertx.core.logging.LoggerFactory;
 import io.vertx.ext.web.Router;
 import io.vertx.ext.web.handler.BodyHandler;
 import io.vertx.ext.web.handler.CorsHandler;
+import io.vertx.ext.web.handler.JWTAuthHandler;
 import org.apache.http.entity.ContentType;
 
 import java.util.Arrays;
@@ -70,6 +71,7 @@ public class MainVerticle extends AbstractVerticle{
 		allowedHeaders.add("x-requested-with");
 		allowedHeaders.add("Access-Control-Allow-Origin");
 		allowedHeaders.add("origin");
+		allowedHeaders.add("authorization");
 		allowedHeaders.add("Content-Type");
 		allowedHeaders.add("accept");
 		allowedHeaders.add("X-PINGARUNER");
@@ -89,12 +91,11 @@ public class MainVerticle extends AbstractVerticle{
 		router.route().handler(CorsHandler.create("*").allowedHeaders(allowedHeaders).allowedMethods(allowedMethods));
 		router.route().handler(BodyHandler.create());
 
-		router.route("/").handler(routingContext -> reply("Hello World!", routingContext.response()));
-
 		router.post("/login").handler(routingContext ->
 				authManager.login(routingContext.getBodyAsJson(), reply -> {
 					if(reply.succeeded()) {
 						if (reply.result() != null) {
+							LOGGER.info(reply.result());
 							routingContext.response().end(reply.result());
 						} else {
 							routingContext.fail(401);
@@ -122,54 +123,57 @@ public class MainVerticle extends AbstractVerticle{
 				connectorController.data(new DataRequest(routingContext.request().getParam("id"), ""), result ->
 					replyWithContentType(result, routingContext.response())));
 
-		router.route("/jobs/find/all").handler(routingContext ->
+
+		router.route("/api/*").handler(JWTAuthHandler.create(authManager.getProvider()));
+
+		router.route("/api/jobs/find/all").handler(routingContext ->
 				jobController.findAll(result -> reply(result, routingContext.response())));
 
-		router.route("/jobs/delete/all").handler(routingContext ->
+		router.route("/api/jobs/delete/all").handler(routingContext ->
 				jobController.deleteAll(result -> reply(result, routingContext.response())));
 
-		router.route("/dataassets/:id/publish").handler(routingContext ->
+		router.route("/api/dataassets/:id/publish").handler(routingContext ->
 				dataAssetController.publish(Long.parseLong(routingContext.request().getParam("id")), result -> reply(result, routingContext.response())));
 
-		router.route("/dataassets/:id/unpublish").handler(routingContext ->
+		router.route("/api/dataassets/:id/unpublish").handler(routingContext ->
 				dataAssetController.unPublish(Long.parseLong(routingContext.request().getParam("id")), result -> reply(result, routingContext.response())));
 
 
-		router.route("/dataassets/:id/delete").handler(routingContext ->
+		router.route("/api/dataassets/:id/delete").handler(routingContext ->
 				dataAssetController.delete(Long.parseLong(routingContext.request().getParam("id")), result -> reply(result, routingContext.response())));
 
-		router.route("/dataassets/").handler(routingContext ->
+		router.route("/api/dataassets/").handler(routingContext ->
 				dataAssetController.index(result -> reply(result, routingContext.response())));
 
 
-		router.route("/dataassets/counts/").handler(routingContext ->
+		router.route("/api/dataassets/counts/").handler(routingContext ->
 				dataAssetController.counts(result -> reply(result, routingContext.response())));
 
 
 //		router.route("/dataassets/resource/:name").handler(routingContext ->
 //				dataAssetController.resource("",result -> reply(result, routingContext.response())));
 
-		router.post("/dataassets/add").handler(routingContext ->
+		router.post("/api/dataassets/add").handler(routingContext ->
 				dataAssetController.add(Json.decodeValue(routingContext.getBodyAsJson().toString(), DataAssetDescription.class), result -> reply(result, routingContext.response())));
 
 //		router.route("/uri/:name").handler(routingContext ->
 //						getUri(result -> reply(result, routingContext.response()), routingContext)
 //				);
 
-		router.post("/datasources/add/").handler(routingContext -> {
+		router.post("/api/datasources/add/").handler(routingContext -> {
 				dataSourceController.add(toDataSource(routingContext.getBodyAsJson()), result -> reply(result, routingContext.response()));
 				});
 
-		router.route("/datasources/delete/:id").handler(routingContext ->
+		router.route("/api/datasources/delete/:id").handler(routingContext ->
 				dataSourceController.delete(Long.parseLong(routingContext.request().getParam("id")), result -> reply(result, routingContext.response())));
 
-		router.route("/datasources/findAll").handler(routingContext ->
+		router.route("/api/datasources/findAll").handler(routingContext ->
 				dataSourceController.findAllByType(result -> reply(result, routingContext.response())));
 
-		router.route("/datasources/find/id/:id").handler(routingContext ->
+		router.route("/api/datasources/find/id/:id").handler(routingContext ->
 				dataSourceController.findById(Long.parseLong(routingContext.request().getParam("id")), result -> reply(result, routingContext.response())));
 
-		router.post("/datasources/edit/").handler(routingContext ->
+		router.post("/api/datasources/edit/").handler(routingContext ->
 				dataSourceController.update(Json.decodeValue(routingContext.getBodyAsJson().toString(), DataSource.class), result -> reply(result, routingContext.response())));
 
 		server.requestHandler(router).listen(8090);
