@@ -21,6 +21,7 @@ import org.apache.http.entity.mime.content.ContentBody;
 import org.apache.http.entity.mime.content.StringBody;
 
 import java.io.ByteArrayOutputStream;
+import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
@@ -50,7 +51,14 @@ public class ConnectorController {
 	}
 
 	public void about(String extension, Handler<AsyncResult<ReturnObject>> resultHandler) {
-		ContentTypeWrapper contentTypeWrapper = getContentTypeWrapper(FileType.valueOf(extension.toUpperCase()));
+		FileType type;
+		try{
+			type = FileType.valueOf(extension.toUpperCase());
+		}
+		catch(Exception e){
+			type = FileType.TTL;
+		}
+		ContentTypeWrapper contentTypeWrapper = getContentTypeWrapper(type);
 		idsService.getConnector( reply -> {
 			if (reply.succeeded()) {
 				ContentBody cb = new StringBody(Json.encodePrettily(idsService.getSelfDescriptionResponse()), ContentType.create("application/json"));
@@ -99,7 +107,7 @@ public class ConnectorController {
 			if (reply.succeeded()) {
 				DataAsset dataAsset = Json.decodeValue(reply.result().toString(), DataAsset.class);
 
-				dataSourceManager.findById(Long.parseLong(dataAsset.getSourceID()), reply2 -> {
+				dataSourceManager.findById(dataAsset.getSourceID(), reply2 -> {
 					if(reply2.succeeded()){
 						DataSource dataSource = Json.decodeValue(reply2.result().toString(), DataSource.class);
 
@@ -111,9 +119,9 @@ public class ConnectorController {
 						dataSourceAdapterService.getFile(dataSource.getDatasourceType(), new JsonObject(Json.encode(request)), reply3 -> {
 							if(reply3.succeeded()){
 								if(fileType.equals(FileType.JSON)) {
-									getJSON(reply3.result().getString("result"), resultHandler);
+									getJSON(reply3.result().getValue("result").toString(), resultHandler);
 								} else {
-									getMultiPart(reply3.result().toString(), fileType, resultHandler);
+									getMultiPart(reply3.result().getValue("result").toString(), fileType, resultHandler);
 								}
 							}
 							else{
@@ -137,8 +145,7 @@ public class ConnectorController {
 
 	private void getJSON(String fileContent, Handler<AsyncResult<ReturnObject>> resultHandler) {
 		IDSMetadata idsMetadata = new IDSMetadata();
-		String cb = Json.encode(idsService.getSelfDescriptionResponse());
-		idsMetadata.header = cb;
+		idsMetadata.header = Json.encode(idsService.getSelfDescriptionResponse());
 		idsMetadata.payload = fileContent;
 		ReturnObject returnObject = new ReturnObject(Json.encode(idsMetadata), new ContentTypeWrapper("application/json", ""));
 		resultHandler.handle(Future.succeededFuture(returnObject));

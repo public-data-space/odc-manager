@@ -21,7 +21,7 @@ public class DataAssetManager {
 
 	private Logger LOGGER = LoggerFactory.getLogger(DataAssetManager.class.getName());
 
-	DatabaseService dbService;
+	private DatabaseService dbService;
 
 
 	public DataAssetManager(Vertx vertx) {
@@ -99,17 +99,43 @@ public class DataAssetManager {
 		});
 	}
 
+	public void addInitial(Handler<AsyncResult<Long>> resultHandler){
+		Date d = new Date();
+		JsonArray params = new JsonArray()
+				.add(d.toInstant())
+				.add(d.toInstant());
+
+		dbService.update("INSERT INTO DataAsset (created_at, updated_at) values(?,?)",params, reply -> {
+			if (reply.succeeded()) {
+				dbService.query("SELECT id FROM dataasset WHERE created_at = ? ",new JsonArray().add(d.toInstant()), reply2 -> {
+					if(reply2.succeeded()){
+						if(reply2.result().size() == 1) {
+							resultHandler.handle(Future.succeededFuture(reply2.result().get(0).getLong("id")));
+						}
+						else{
+							resultHandler.handle(Future.failedFuture("Concurrency exception."));
+						}
+					}
+					else{
+						resultHandler.handle(Future.failedFuture(reply2.cause().toString()));
+					}
+				});
+			} else {
+				resultHandler.handle(Future.failedFuture(reply.cause()));
+			}
+		});
+	}
+
 	public void add(JsonObject dataAssetJson, Handler<AsyncResult<Void>> resultHandler) {
 
 		DataAsset dataAsset = Json.decodeValue(dataAssetJson.toString(),DataAsset.class);
 
-		String update = "INSERT INTO DataAsset (created_at, updated_at, datasetid, name, url, format, licenseurl, "
-				+ "licensetitle, datasettitle, datasetnotes, orignalresourceurl, orignaldataseturl, "
-				+ "signature, status, resourceid, tags, datasetdescription, organizationtitle, "
-				+ "organizationdescription, version, sourceid) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+		String update = "Update DataAsset SET updated_at = ?, datasetid = ?, name = ?, url = ?, format = ?, licenseurl = ?, "
+				+ "licensetitle = ?, datasettitle = ?, datasetnotes = ?, orignalresourceurl = ?, orignaldataseturl = ?, "
+				+ "signature = ?, status = ?, resourceid = ?, tags = ?, datasetdescription = ?, organizationtitle = ?, "
+				+ "organizationdescription = ?, version = ?, sourceid = ? WHERE id = ?";
 		Date d = new Date();
 		JsonArray params = new JsonArray()
-				.add(d.toInstant())
 				.add(d.toInstant())
 				.add(checkNull(dataAsset.getDatasetID()))
 				.add(checkNull(dataAsset.getName()))
@@ -129,7 +155,8 @@ public class DataAssetManager {
 				.add(checkNull(dataAsset.getOrganizationTitle()))
 				.add(checkNull(dataAsset.getOrganizationDescription()))
 				.add(checkNull(dataAsset.getVersion()))
-				.add(checkNull(dataAsset.getSourceID()));
+				.add(checkNull(dataAsset.getSourceID().toString()))
+				.add(dataAsset.getId());
 
 		dbService.update(update,params, reply -> {
 			if (reply.failed()) {

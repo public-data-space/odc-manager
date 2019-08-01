@@ -18,7 +18,7 @@ import io.vertx.core.logging.LoggerFactory;
 
 public class JobService extends AbstractVerticle {
 
-	final Logger LOGGER = LoggerFactory.getLogger(JobService.class.getName());
+	private final Logger LOGGER = LoggerFactory.getLogger(JobService.class.getName());
 	private JobManager jobManager;
 	private DataAssetManager dataAssetManager;
 	private DataSourceManager dataSourceManager;
@@ -39,35 +39,42 @@ public class JobService extends AbstractVerticle {
 				job));
 	}
 
-	/**
-	 * @param result
-	 */
 	private void initiateDataAssetCreation(Handler<AsyncResult<DataAsset>> next, AsyncResult<Job> result) {
 		if (result.succeeded()) {
-			Job job = result.result();
-			LOGGER.info("Started Job with ID: " + job.getId());
 
-			getDataSource(Long.parseLong(job.getSourceID()), reply -> {
-				if (reply.succeeded()) {
-					jobManager.updateStatus(job.getId(), JobStatus.RUNNING, reply2 -> {
-					});
+			dataAssetManager.addInitial(reply -> {
+				if(reply.succeeded()){
+					Job job = result.result();
+					LOGGER.info("Started Job with ID: " + job.getId());
 
-					DataAssetCreateMessage mes = new DataAssetCreateMessage();
-					mes.setJob(job);
-					mes.setDataSource(reply.result());
-					dataSourceAdapterService.createDataAsset(reply.result().getDatasourceType(), new JsonObject(Json.encode(mes)), reply3 -> {
-						if (reply3.succeeded()) {
-							next.handle(Future.succeededFuture(Json.decodeValue(reply3.result().toString(), DataAsset.class)));
+					getDataSource(Long.parseLong(job.getSourceID()), reply4 -> {
+						if (reply4.succeeded()) {
+							jobManager.updateStatus(job.getId(), JobStatus.RUNNING, reply2 -> {});
+
+							DataAssetCreateMessage mes = new DataAssetCreateMessage();
+							mes.setJob(job);
+							mes.setDataSource(reply4.result());
+							mes.setDataAssetId(reply.result());
+							dataSourceAdapterService.createDataAsset(reply4.result().getDatasourceType(), new JsonObject(Json.encode(mes)), reply5-> {
+								if (reply5.succeeded()) {
+									next.handle(Future.succeededFuture(Json.decodeValue(reply5.result().toString(), DataAsset.class)));
+								} else {
+									LOGGER.info(reply5.cause());
+									next.handle(Future.failedFuture(reply5.cause()));
+								}
+							});
 						} else {
-							LOGGER.info(reply3.cause());
-							next.handle(Future.failedFuture(reply3.cause()));
+							LOGGER.info(reply4.cause());
+							next.handle(Future.failedFuture(reply4.cause()));
 						}
 					});
-				} else {
+				}
+				else{
 					LOGGER.info(reply.cause());
 					next.handle(Future.failedFuture(reply.cause()));
 				}
 			});
+
 		}
 		else{
 			LOGGER.info("Job could not be found\n\n"+result.cause());
@@ -116,9 +123,6 @@ public class JobService extends AbstractVerticle {
 		});
 	}
 
-	/**
-	 * @param next
-	 */
 	private void getJob(Handler<AsyncResult<Job>> next) {
 
 		jobManager.findUnfinished(reply -> {

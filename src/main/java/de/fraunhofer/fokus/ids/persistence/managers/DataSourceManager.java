@@ -15,7 +15,7 @@ import static de.fraunhofer.fokus.ids.persistence.util.Functions.checkNull;
 
 public class DataSourceManager {
 
-    DatabaseService dbService;
+    private DatabaseService dbService;
     private Logger LOGGER = LoggerFactory.getLogger(DataSourceManager.class.getName());
 
 
@@ -55,7 +55,7 @@ public class DataSourceManager {
                 .add(d.toInstant())
                 .add(d.toInstant())
                 .add(checkNull(dataSource.getDatasourceName()))
-                .add(dataSource.getData().toString())
+                .add(dataSource.getData())
                 .add(dataSource.getDatasourceType());
 
         dbService.update(update, params, reply -> {
