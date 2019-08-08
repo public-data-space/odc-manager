@@ -28,8 +28,8 @@ public interface DataSourceAdapterService {
 
 
     @GenIgnore
-    static DataSourceAdapterService create(WebClient webClient, Handler<AsyncResult<DataSourceAdapterService>> readyHandler) {
-        return new DataSourceAdapterServiceImpl(webClient, readyHandler);
+    static DataSourceAdapterService create(WebClient webClient, int gatewayPort, String gatewayHost, Handler<AsyncResult<DataSourceAdapterService>> readyHandler) {
+        return new DataSourceAdapterServiceImpl(webClient, gatewayPort, gatewayHost, readyHandler);
     }
 
     @GenIgnore

@@ -13,9 +13,14 @@ public class DataSourceAdapterServiceImpl implements DataSourceAdapterService {
     private Logger LOGGER = LoggerFactory.getLogger(DataSourceAdapterServiceImpl.class.getName());
 
     private WebClient webClient;
+    private int gatewayPort;
+    private String gatewayHost;
 
-    public DataSourceAdapterServiceImpl(WebClient webClient, Handler<AsyncResult<DataSourceAdapterService>> readyHandler) {
+    public DataSourceAdapterServiceImpl(WebClient webClient, int gatewayPort, String gatewayHost, Handler<AsyncResult<DataSourceAdapterService>> readyHandler) {
         this.webClient = webClient;
+        this.gatewayHost = gatewayHost;
+        this.gatewayPort = gatewayPort;
+
         readyHandler.handle(Future.succeededFuture(this));
     }
 
@@ -49,7 +54,7 @@ public class DataSourceAdapterServiceImpl implements DataSourceAdapterService {
     @Override
     public DataSourceAdapterService getFile(String dataSourceType, JsonObject request, Handler<AsyncResult<JsonObject>> resultHandler) {
 
-        post(8093, "localhost", "/getFile/"+dataSourceType, request, reply -> {
+        post(gatewayPort, gatewayHost, "/getFile/"+dataSourceType, request, reply -> {
             if (reply.succeeded()) {
                 resultHandler.handle(Future.succeededFuture(reply.result()));
             } else {
@@ -62,7 +67,7 @@ public class DataSourceAdapterServiceImpl implements DataSourceAdapterService {
 
     @Override
     public DataSourceAdapterService supported(String dataSourceType, Handler<AsyncResult<JsonObject>> resultHandler) {
-        get(8093, "localhost", "/supported/"+dataSourceType, reply -> {
+        get(gatewayPort, gatewayHost, "/supported/"+dataSourceType, reply -> {
             if (reply.succeeded()) {
                 resultHandler.handle(Future.succeededFuture(reply.result()));
             } else {
@@ -75,7 +80,7 @@ public class DataSourceAdapterServiceImpl implements DataSourceAdapterService {
 
     @Override
     public DataSourceAdapterService delete(String dataSourceType, Long id, Handler<AsyncResult<JsonObject>> resultHandler) {
-        get(8093, "localhost", "/supported/"+dataSourceType+"/"+id, reply -> {
+        get(gatewayPort, gatewayHost, "/supported/"+dataSourceType+"/"+id, reply -> {
             if (reply.succeeded()) {
                 resultHandler.handle(Future.succeededFuture(reply.result()));
             } else {
@@ -88,7 +93,7 @@ public class DataSourceAdapterServiceImpl implements DataSourceAdapterService {
 
     @Override
     public DataSourceAdapterService createDataAsset(String dataSourceType, JsonObject message, Handler<AsyncResult<JsonObject>> resultHandler) {
-        post(8093, "localhost", "/create/"+dataSourceType, message, reply -> {
+        post(gatewayPort, gatewayHost, "/create/"+dataSourceType, message, reply -> {
             if (reply.succeeded()) {
                 resultHandler.handle(Future.succeededFuture(reply.result()));
             } else {

@@ -1,77 +1,76 @@
 package de.fraunhofer.fokus.ids.services;
 
-import io.vertx.core.AbstractVerticle;
-import io.vertx.core.Future;
-import io.vertx.core.eventbus.EventBus;
-import io.vertx.core.json.Json;
+import de.fraunhofer.fokus.ids.models.Constants;
+import de.fraunhofer.fokus.ids.persistence.service.DatabaseService;
+import io.vertx.config.ConfigRetriever;
+import io.vertx.config.ConfigRetrieverOptions;
+import io.vertx.config.ConfigStoreOptions;
+import io.vertx.core.*;
 import io.vertx.core.json.JsonArray;
-import io.vertx.core.json.JsonObject;
 import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
+import org.mindrot.jbcrypt.BCrypt;
 
-public class InitService extends AbstractVerticle{
+
+public class InitService{
 
 	final Logger LOGGER = LoggerFactory.getLogger(InitService.class.getName());
 
-	private EventBus eb;
-	private JsonObject config;
-	private String ROUTE_PREFIX = "de.fraunhofer.fokus.ids.";
+	private DatabaseService databaseService;
+	private Vertx vertx;
 
-	@Override
-	public void start(Future<Void> startFuture) {
-		this.eb = vertx.eventBus();
-		Future<JsonObject> configFuture = getConfigFuture();
-		configFuture.setHandler(ac -> {
-			if(ac.succeeded()) {
-				this.config = ac.result();
-				initDefaultResources();
+	public InitService(Vertx vertx){
+		this.databaseService = DatabaseService.createProxy(vertx, Constants.DATABASE_SERVICE);
+		this.vertx = vertx;
+	}
+
+	public void initDatabase(Handler<AsyncResult<Void>> resultHandler){
+
+		createAdminUser(reply -> {
+			if (reply.succeeded()) {
+				resultHandler.handle(Future.succeededFuture());
 			}
-			else {
-				LOGGER.error("Config Future could not be completed.");
+			else{
+				LOGGER.info("Initialization failed.", reply.cause());
+				resultHandler.handle(Future.failedFuture(reply.cause()));
 			}
 		});
-		initDefaultResources();
+	}
+
+	private void createAdminUser(Handler<AsyncResult<Void>> resultHandler){
+
+		ConfigStoreOptions confStore = new ConfigStoreOptions()
+				.setType("env");
+
+		ConfigRetrieverOptions options = new ConfigRetrieverOptions().addStore(confStore);
+
+		ConfigRetriever retriever = ConfigRetriever.create(vertx, options);
+
+		retriever.getConfig(ar -> {
+			if (ar.succeeded()) {
+				databaseService.update("INSERT INTO public.user(created_at, updated_at, username, password) \n" +
+						"    SELECT NOW(), NOW(), ?, ?\n" +
+						"WHERE NOT EXISTS (\n" +
+						"    SELECT 1 FROM public.user WHERE username=?\n" +
+						");", new JsonArray()
+						.add(ar.result().getString("FRONTEND_ADMIN"))
+						.add(BCrypt.hashpw(ar.result().getString("FRONTEND_ADMIN_PW"), BCrypt.gensalt()))
+						.add(ar.result().getString("FRONTEND_ADMIN")), reply -> {
+					if (reply.succeeded()) {
+						resultHandler.handle(Future.succeededFuture());
+					} else {
+						LOGGER.info("Adminuser creation failed.", reply.cause());
+						resultHandler.handle(Future.failedFuture(reply.cause()));
+					}
+				});
+			}
+			else{
+
+			}
+		});
 	}
 
 	private void initDefaultResources() {
-		if(config.getBoolean("init.enabled")) {
-			JsonArray initResources = config.getJsonArray("init.resources");
-			initResources.stream().forEach(resourceID -> {
-				eb.send(ROUTE_PREFIX+"dataAssetManager.resourceIDexists", resourceID, res -> {
-					if(res.succeeded()) {
-						if((Boolean)res.result().body()) {
-							eb.send(ROUTE_PREFIX+"jobManager.add", resourceID, job -> {
-								if(job.succeeded()) {
-									eb.send(ROUTE_PREFIX+"jobService.process", job.result().body().toString());
-								}
-								else {
-									LOGGER.error("Job could not be added.");
-								} 
-							});
-						}
-						else {
-							LOGGER.error("ResourceId does not exist.");
-						}
-					}
-					else {
-						LOGGER.error("ResourceId's existance could not be checked.");
-					}
-				});
-			});
-		}
-	}
-
-	private Future<JsonObject> getConfigFuture() {
-		Future<JsonObject> configFuture = Future.future();
-		eb.send(ROUTE_PREFIX+"repositoryService.configRetrieverVerticle.getConfig", "", res -> {
-			if(res.succeeded()) {
-				configFuture.complete(Json.decodeValue(res.result().body().toString(),JsonObject.class));
-			}
-			else {
-				LOGGER.error("Config could not be loaded.");
-				configFuture.fail("Config could not be loaded.");
-			}
-		});
-		return configFuture;
+	//TODO
 	}
 }

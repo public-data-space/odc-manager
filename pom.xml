@@ -55,7 +55,7 @@
                                         implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
                                     <manifestEntries>
                                         <Main-Class>io.vertx.core.Launcher</Main-Class>
-                                        <Main-Verticle>ConnectorService</Main-Verticle>
+                                        <Main-Verticle>de.fraunhofer.fokus.ids.main.MainVerticle</Main-Verticle>
                                     </manifestEntries>
                                 </transformer>
                                 <transformer
@@ -83,24 +83,6 @@
                 </executions>
                 <configuration>
                     <mainClass>de.fraunhofer.fokus.ids.main.MainVerticle</mainClass>
-                </configuration>
-            </plugin>
-            <plugin>
-                <groupId>io.reactiverse</groupId>
-                <artifactId>vertx-maven-plugin</artifactId>
-                <version>1.0.20</version>
-                <executions>
-                    <execution>
-                        <id>vmp</id>
-                        <goals>
-                            <goal>initialize</goal>
-                            <goal>run</goal>
-                        </goals>
-                    </execution>
-                </executions>
-                <configuration>
-                    <verticle>de.fraunhofer.fokus.ids.main.MainVerticle</verticle>
-                    <redeploy>true</redeploy>
                 </configuration>
             </plugin>
         </plugins>
@@ -180,7 +162,7 @@
         <dependency>
             <groupId>de.fraunhofer.fokus.ids</groupId>
             <artifactId>odc-utils</artifactId>
-            <version>0.0.1</version>
+            <version>1.0-SNAPSHOT</version>
         </dependency>
     </dependencies>
     <repositories>
@@ -190,4 +172,16 @@
             <url>https://mvn.isst.fraunhofer.de/nexus/repository/ids-local</url>
         </repository>
     </repositories>
+    <distributionManagement>
+        <repository>
+            <id>paca</id>
+            <name>Paca Releases Repo</name>
+            <url>https://paca.okd.fokus.fraunhofer.de/repository/maven-releases/</url>
+        </repository>
+        <snapshotRepository>
+            <id>paca</id>
+            <name>Paca Snapshots Repo</name>
+            <url>https://paca.okd.fokus.fraunhofer.de/repository/maven-snapshots/</url>
+        </snapshotRepository>
+    </distributionManagement>
 </project>

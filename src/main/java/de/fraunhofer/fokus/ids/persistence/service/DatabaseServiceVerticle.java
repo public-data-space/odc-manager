@@ -13,6 +13,7 @@ import io.vertx.ext.asyncsql.PostgreSQLClient;
 import io.vertx.ext.sql.SQLClient;
 import io.vertx.serviceproxy.ServiceBinder;
 
+
 public class DatabaseServiceVerticle extends AbstractVerticle {
 
     private Logger LOGGER = LoggerFactory.getLogger(DatabaseServiceVerticle.class.getName());
@@ -20,18 +21,23 @@ public class DatabaseServiceVerticle extends AbstractVerticle {
     @Override
     public void start(Future<Void> startFuture) {
 
+        ConfigStoreOptions confStore = new ConfigStoreOptions()
+                .setType("env");
 
-        ConfigStoreOptions fileStore = new ConfigStoreOptions()
-                .setType("file")
-                .setConfig(new JsonObject().put("path", this.getClass().getClassLoader().getResource("conf/application.conf").getFile()));
-
-        ConfigRetrieverOptions options = new ConfigRetrieverOptions().addStore(fileStore);
+        ConfigRetrieverOptions options = new ConfigRetrieverOptions().addStore(confStore);
 
         ConfigRetriever retriever = ConfigRetriever.create(vertx, options);
 
         retriever.getConfig(ar -> {
             if (ar.succeeded()) {
-                JsonObject config = ar.result().getJsonObject("config").getJsonObject("database");
+                JsonObject env = ar.result();
+                JsonObject config = new JsonObject()
+                        .put("host", env.getString("HOST"))
+                        .put("port", env.getLong("PORT"))
+                        .put("username", env.getString("USER"))
+                        .put("database", env.getString("DATABASE"))
+                        .put("password", env.getString("PASSWORD"));
+
                 SQLClient jdbc = PostgreSQLClient.createShared(vertx, config);
                 DatabaseService.create(jdbc, ready -> {
                     if (ready.succeeded()) {
@@ -39,16 +45,17 @@ public class DatabaseServiceVerticle extends AbstractVerticle {
                         binder
                                 .setAddress(Constants.DATABASE_SERVICE)
                                 .register(DatabaseService.class, ready.result());
+                        LOGGER.info("Databaseservice successfully started.");
                         startFuture.complete();
                     } else {
+                        LOGGER.info(ready.cause());
                         startFuture.fail(ready.cause());
                     }
                 });
             } else {
+                startFuture.fail(ar.cause());
                 LOGGER.error("Config could not be retrieved.");
             }
         });
-        startFuture.complete();
     }
-
 }

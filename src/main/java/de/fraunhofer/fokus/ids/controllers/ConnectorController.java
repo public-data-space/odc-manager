@@ -21,7 +21,6 @@ import org.apache.http.entity.mime.content.ContentBody;
 import org.apache.http.entity.mime.content.StringBody;
 
 import java.io.ByteArrayOutputStream;
-import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;

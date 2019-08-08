@@ -10,6 +10,7 @@ import de.fraunhofer.fokus.ids.models.ReturnObject;
 import de.fraunhofer.fokus.ids.persistence.entities.DataSource;
 import de.fraunhofer.fokus.ids.persistence.managers.AuthManager;
 import de.fraunhofer.fokus.ids.persistence.service.DatabaseServiceVerticle;
+import de.fraunhofer.fokus.ids.services.InitService;
 import de.fraunhofer.fokus.ids.services.datasourceAdapter.DataSourceAdapterServiceVerticle;
 import io.vertx.core.*;
 import io.vertx.core.http.HttpMethod;
@@ -49,18 +50,39 @@ public class MainVerticle extends AbstractVerticle{
 		DeploymentOptions deploymentOptions = new DeploymentOptions();
 		deploymentOptions.setWorker(true);
 
-		vertx.deployVerticle( DatabaseServiceVerticle.class.getName(),deploymentOptions,  reply-> LOGGER.info("DataBaseService started"));
-		vertx.deployVerticle( DataSourceAdapterServiceVerticle.class.getName(),deploymentOptions, reply-> {
-			if(reply.succeeded()){
-				LOGGER.info("DataSourceAdapterService started");
+		LOGGER.info("Starting services...");
+		Future<String> deployment = Future.succeededFuture();
+		deployment
+				.compose(id1 -> {
+					Future<String> databaseDeploymentFuture = Future.future();
+					vertx.deployVerticle(DatabaseServiceVerticle.class.getName(), deploymentOptions, databaseDeploymentFuture.completer());
+					return databaseDeploymentFuture;
+				})
+				.compose(id2 -> {
+					Future<String> datasourceAdapterFuture = Future.future();
+					vertx.deployVerticle(DataSourceAdapterServiceVerticle.class.getName(), deploymentOptions, datasourceAdapterFuture.completer());
+					return datasourceAdapterFuture;
+				}).setHandler( ar -> {
+			if (ar.succeeded()) {
+				LOGGER.info("Services successfully started.");
+				InitService initService = new InitService(vertx);
+				initService.initDatabase(reply -> {
+					if(reply.succeeded()){
+						LOGGER.info("Adminaccount successfully created.");
+						router = Router.router(vertx);
+						createHttpServer(vertx);
+						startFuture.complete();
+					}
+					else{
+						LOGGER.info(reply.cause());
+						startFuture.fail(ar.cause());
+					}
+				});
+			} else {
+				LOGGER.info(ar.cause());
+				startFuture.fail(ar.cause());
 			}
-			else{
-				LOGGER.info(reply.cause());
-			}
-		} );
-
-		router = Router.router(vertx);
-		createHttpServer(vertx);
+		});
 
 	}
 
@@ -80,13 +102,6 @@ public class MainVerticle extends AbstractVerticle{
 		allowedMethods.add(HttpMethod.GET);
 		allowedMethods.add(HttpMethod.POST);
 		allowedMethods.add(HttpMethod.OPTIONS);
-		/*
-		 * these methods aren't necessary for this sample,
-		 * but you may need them for your projects
-		 */
-		allowedMethods.add(HttpMethod.DELETE);
-		allowedMethods.add(HttpMethod.PATCH);
-		allowedMethods.add(HttpMethod.PUT);
 
 		router.route().handler(CorsHandler.create("*").allowedHeaders(allowedHeaders).allowedMethods(allowedMethods));
 		router.route().handler(BodyHandler.create());
@@ -95,7 +110,6 @@ public class MainVerticle extends AbstractVerticle{
 				authManager.login(routingContext.getBodyAsJson(), reply -> {
 					if(reply.succeeded()) {
 						if (reply.result() != null) {
-							LOGGER.info(reply.result());
 							routingContext.response().end(reply.result());
 						} else {
 							routingContext.fail(401);

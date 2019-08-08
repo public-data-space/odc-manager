@@ -49,13 +49,13 @@ public class DataSourceManager {
     public void add(DataSource dataSource, Handler<AsyncResult<Void>> resultHandler) {
 
         String update = "INSERT INTO DataSource (created_at, updated_at, datasourcename, data, datasourcetype) " +
-                "values (?, ?, ?, ?, ?)";
+                "values (?, ?, ?, ?::JSON, ?)";
         Date d = new Date();
         JsonArray params = new JsonArray()
                 .add(d.toInstant())
                 .add(d.toInstant())
                 .add(checkNull(dataSource.getDatasourceName()))
-                .add(dataSource.getData())
+                .add(dataSource.getData().toString())
                 .add(dataSource.getDatasourceType());
 
         dbService.update(update, params, reply -> {
