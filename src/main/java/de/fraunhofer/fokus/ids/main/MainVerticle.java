@@ -11,7 +11,11 @@ import de.fraunhofer.fokus.ids.persistence.entities.DataSource;
 import de.fraunhofer.fokus.ids.persistence.managers.AuthManager;
 import de.fraunhofer.fokus.ids.persistence.service.DatabaseServiceVerticle;
 import de.fraunhofer.fokus.ids.services.InitService;
+import de.fraunhofer.fokus.ids.services.datasourceAdapter.DataSourceAdapterService;
 import de.fraunhofer.fokus.ids.services.datasourceAdapter.DataSourceAdapterServiceVerticle;
+import io.vertx.config.ConfigRetriever;
+import io.vertx.config.ConfigRetrieverOptions;
+import io.vertx.config.ConfigStoreOptions;
 import io.vertx.core.*;
 import io.vertx.core.http.HttpMethod;
 import io.vertx.core.http.HttpServer;
@@ -38,6 +42,7 @@ public class MainVerticle extends AbstractVerticle{
 	private DataAssetController dataAssetController;
 	private DataSourceController dataSourceController;
 	private JobController jobController;
+	private int servicePort;
 
 	@Override
 	public void start(Future<Void> startFuture) {
@@ -62,6 +67,22 @@ public class MainVerticle extends AbstractVerticle{
 					Future<String> datasourceAdapterFuture = Future.future();
 					vertx.deployVerticle(DataSourceAdapterServiceVerticle.class.getName(), deploymentOptions, datasourceAdapterFuture.completer());
 					return datasourceAdapterFuture;
+				})
+				.compose(id3 -> {
+					Future<String> envFuture = Future.future();
+					ConfigStoreOptions confStore = new ConfigStoreOptions()
+							.setType("env");
+					ConfigRetrieverOptions options = new ConfigRetrieverOptions().addStore(confStore);
+					ConfigRetriever retriever = ConfigRetriever.create(vertx, options);
+					retriever.getConfig(ar -> {
+						if (ar.succeeded()) {
+							servicePort = ar.result().getInteger("SERVICE_PORT");
+							envFuture.complete();
+						} else {
+							envFuture.fail(ar.cause());
+						}
+					});
+					return envFuture;
 				}).setHandler( ar -> {
 			if (ar.succeeded()) {
 				LOGGER.info("Services successfully started.");
@@ -174,9 +195,8 @@ public class MainVerticle extends AbstractVerticle{
 //						getUri(result -> reply(result, routingContext.response()), routingContext)
 //				);
 
-		router.post("/api/datasources/add/").handler(routingContext -> {
-				dataSourceController.add(toDataSource(routingContext.getBodyAsJson()), result -> reply(result, routingContext.response()));
-				});
+		router.post("/api/datasources/add/").handler(routingContext ->
+				dataSourceController.add(toDataSource(routingContext.getBodyAsJson()), result -> reply(result, routingContext.response())));
 
 		router.route("/api/datasources/delete/:id").handler(routingContext ->
 				dataSourceController.delete(Long.parseLong(routingContext.request().getParam("id")), result -> reply(result, routingContext.response())));
@@ -190,8 +210,8 @@ public class MainVerticle extends AbstractVerticle{
 		router.post("/api/datasources/edit/").handler(routingContext ->
 				dataSourceController.update(Json.decodeValue(routingContext.getBodyAsJson().toString(), DataSource.class), result -> reply(result, routingContext.response())));
 
-		server.requestHandler(router).listen(8090);
-		LOGGER.info("odc-manager deployed on localhost:8090");
+		server.requestHandler(router).listen(servicePort);
+		LOGGER.info("odc-manager deployed on port "+servicePort);
 	}
 
 	//TODO: WORKAROUND. Find way to use Json.deserialize()
