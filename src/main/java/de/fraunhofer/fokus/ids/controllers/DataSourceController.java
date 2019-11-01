@@ -1,8 +1,11 @@
 package de.fraunhofer.fokus.ids.controllers;
 
+import de.fraunhofer.fokus.ids.models.Constants;
 import de.fraunhofer.fokus.ids.persistence.entities.DataSource;
 import de.fraunhofer.fokus.ids.persistence.managers.DataSourceManager;
+import de.fraunhofer.fokus.ids.services.datasourceAdapter.DataSourceAdapterService;
 import io.vertx.core.*;
+import io.vertx.core.json.Json;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.core.logging.Logger;
@@ -12,9 +15,23 @@ public class DataSourceController {
 
     private Logger LOGGER = LoggerFactory.getLogger(DataSourceController.class.getName());
     private DataSourceManager dataSourceManager;
+    private DataSourceAdapterService dataSourceAdapterService;
 
     public DataSourceController(Vertx vertx){
         this.dataSourceManager = new DataSourceManager(vertx);
+        this.dataSourceAdapterService = DataSourceAdapterService.createProxy(vertx, Constants.DATASOURCEADAPTER_SERVICE);
+    }
+
+    public void getFormSchema(String type, Handler<AsyncResult<JsonObject>> resultHandler) {
+
+        dataSourceAdapterService.getDataSourceFormSchema(type, reply2 -> {
+            if (reply2.succeeded()) {
+                resultHandler.handle(Future.succeededFuture(reply2.result()));
+            }
+            else{
+                LOGGER.info(reply2.cause());
+            }
+        });
     }
 
     public void add(DataSource dataSource, Handler<AsyncResult<JsonObject>> resultHandler) {
@@ -113,7 +130,17 @@ public class DataSourceController {
     public void findById(Long id, Handler<AsyncResult<JsonObject>> resultHandler) {
         dataSourceManager.findById(id, reply -> {
             if (reply.succeeded()) {
-                resultHandler.handle(Future.succeededFuture(reply.result()));
+
+                dataSourceAdapterService.getDataAssetFormSchema(reply.result().getString("datasourcetype"), reply2 -> {
+                    if(reply2.succeeded()){
+
+                        JsonObject newjO = new JsonObject()
+                                .put("source", reply.result())
+                                .put("formSchema", reply2.result());
+
+                        resultHandler.handle(Future.succeededFuture(newjO));
+                    }
+                        });
             }
             else {
                 LOGGER.error("DataSource not found. Cause: "+ reply.cause());
@@ -122,10 +149,11 @@ public class DataSourceController {
         });
     }
 
-    public void findByType(String type, Handler<AsyncResult<JsonArray>> resultHandler) {
+    public void findByType(String type, Handler<AsyncResult<JsonObject>> resultHandler) {
         dataSourceManager.findByType(type, reply -> {
             if (reply.succeeded()) {
-                resultHandler.handle(Future.succeededFuture(reply.result()));
+                JsonObject result = new JsonObject().put("type", type).put("result", reply.result());
+                resultHandler.handle(Future.succeededFuture(result));
             }
             else {
                 LOGGER.error("DataSources not found. Cause: "+ reply.cause());

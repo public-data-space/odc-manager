@@ -26,6 +26,11 @@ public interface DataSourceAdapterService {
     @Fluent
     DataSourceAdapterService createDataAsset(String dataSourceType, JsonObject message, Handler<AsyncResult<JsonObject>> resultHandler);
 
+    @Fluent
+    DataSourceAdapterService getDataAssetFormSchema(String dataSourceType, Handler<AsyncResult<JsonObject>> resultHandler);
+
+    @Fluent
+    DataSourceAdapterService getDataSourceFormSchema(String dataSourceType, Handler<AsyncResult<JsonObject>> resultHandler);
 
     @GenIgnore
     static DataSourceAdapterService create(WebClient webClient, int gatewayPort, String gatewayHost, Handler<AsyncResult<DataSourceAdapterService>> readyHandler) {

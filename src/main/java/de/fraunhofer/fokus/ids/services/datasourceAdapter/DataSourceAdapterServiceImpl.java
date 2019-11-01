@@ -103,4 +103,30 @@ public class DataSourceAdapterServiceImpl implements DataSourceAdapterService {
         });
         return this;
     }
+
+    @Override
+    public DataSourceAdapterService getDataAssetFormSchema(String dataSourceType, Handler<AsyncResult<JsonObject>> resultHandler) {
+        get(gatewayPort, gatewayHost, "/getDataAssetFormSchema/"+dataSourceType, reply -> {
+            if (reply.succeeded()) {
+                resultHandler.handle(Future.succeededFuture(reply.result()));
+            } else {
+                LOGGER.error("No response from CKAN.\n\n" + reply.cause().getMessage());
+                resultHandler.handle(Future.failedFuture(reply.cause()));
+            }
+        });
+        return this;
+    }
+
+    @Override
+    public DataSourceAdapterService getDataSourceFormSchema(String dataSourceType,Handler<AsyncResult<JsonObject>> resultHandler) {
+        get(gatewayPort, gatewayHost, "/getDataSourceFormSchema/"+dataSourceType, reply -> {
+            if (reply.succeeded()) {
+                resultHandler.handle(Future.succeededFuture(reply.result()));
+            } else {
+                LOGGER.error("No response from CKAN.\n\n" + reply.cause().getMessage());
+                resultHandler.handle(Future.failedFuture(reply.cause()));
+            }
+        });
+        return this;
+    }
 }
