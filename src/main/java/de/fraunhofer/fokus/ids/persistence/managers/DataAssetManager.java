@@ -16,22 +16,36 @@ import java.util.Arrays;
 import java.util.Date;
 
 import static de.fraunhofer.fokus.ids.persistence.util.Functions.checkNull;
-
+/**
+ * @author Vincent Bohlen, vincent.bohlen@fokus.fraunhofer.de
+ */
 public class DataAssetManager {
 
 	private Logger LOGGER = LoggerFactory.getLogger(DataAssetManager.class.getName());
-
 	private DatabaseService dbService;
 
+	private static final String FINDBYID_QUERY = "SELECT * FROM DataAsset WHERE id = ?";
+	private static final String FINDPUBLISHED_QUERY = "SELECT * FROM DataAsset WHERE status = ?";
+	private static final String FINDALL_QUERY = "SELECT * FROM DataAsset ORDER BY id DESC";
+	private static final String COUNT_QUERY = "SELECT COUNT(d) FROM DataAsset d";
+	private static final String COUNTPUBLISHED_QUERY = "SELECT COUNT(d) FROM DataAsset d WHERE d.status = ?";
+	private static final String CHANGESTATUS_UPDATE = "UPDATE DataAsset SET status = ?, updated_at = NOW() WHERE id = ?";
+	private static final String ADDINITIAL_UPDATE = "INSERT INTO DataAsset (created_at, updated_at) values(?,?)";
+	private static final String GETID_QUERY = "SELECT id FROM dataasset WHERE created_at = ? ";
+	private static final String ADD_UPDATE = "Update DataAsset SET updated_at = NOW(), datasetid = ?, name = ?, url = ?,"
+			+ " format = ?, licenseurl = ?, licensetitle = ?, datasettitle = ?, datasetnotes = ?, orignalresourceurl = ?,"
+			+ " orignaldataseturl = ?, signature = ?, status = ?, resourceid = ?, tags = ?, datasetdescription = ?,"
+			+ " organizationtitle = ?, organizationdescription = ?, version = ?, sourceid = ? WHERE id = ?";
+	private static final String DELETE_UPDATE = "DELETE FROM dataasset WHERE id = ?";
 
 	public DataAssetManager(Vertx vertx) {
 		dbService = DatabaseService.createProxy(vertx, Constants.DATABASE_SERVICE);
 	}
 
 	public void findById(Long id, Handler<AsyncResult<JsonObject>> resultHandler) {
-		dbService.query("SELECT * FROM DataAsset WHERE id = ?", new JsonArray(Arrays.asList(id)), reply -> {
+		dbService.query(FINDBYID_QUERY, new JsonArray(Arrays.asList(id)), reply -> {
 			if (reply.failed()) {
-				LOGGER.info(reply.cause());
+				LOGGER.error(reply.cause());
 				resultHandler.handle(Future.failedFuture(reply.cause().toString()));
 			} else {
 				resultHandler.handle(Future.succeededFuture(reply.result().get(0)));
@@ -40,9 +54,9 @@ public class DataAssetManager {
 	}
 
 	public void findPublished(Handler<AsyncResult<JsonArray>> resultHandler) {
-		dbService.query("SELECT * FROM DataAsset WHERE status = ?",new JsonArray(Arrays.asList(DataAssetStatus.PUBLISHED.ordinal())), reply -> {
+		dbService.query(FINDPUBLISHED_QUERY, new JsonArray(Arrays.asList(DataAssetStatus.PUBLISHED.ordinal())), reply -> {
 			if (reply.failed()) {
-				LOGGER.info(reply.cause());
+				LOGGER.error(reply.cause());
 				resultHandler.handle(Future.failedFuture(reply.cause().toString()));
 			} else {
 				resultHandler.handle(Future.succeededFuture(new JsonArray(reply.result())));
@@ -51,9 +65,9 @@ public class DataAssetManager {
 	}
 
 	public void findAll(Handler<AsyncResult<JsonArray>> resultHandler) {
-		dbService.query("SELECT * FROM DataAsset ORDER BY id DESC", new JsonArray(), reply -> {
+		dbService.query(FINDALL_QUERY, new JsonArray(), reply -> {
 			if (reply.failed()) {
-				LOGGER.info(reply.cause());
+				LOGGER.error(reply.cause());
 				resultHandler.handle(Future.failedFuture(reply.cause().toString()));
 			} else {
 				resultHandler.handle(Future.succeededFuture(new JsonArray(reply.result())));
@@ -62,9 +76,9 @@ public class DataAssetManager {
 	}
 
 	public void count(Handler<AsyncResult<Long>> resultHandler) {
-		dbService.query("SELECT COUNT(d) FROM DataAsset d", new JsonArray(), reply -> {
+		dbService.query(COUNT_QUERY, new JsonArray(), reply -> {
 			if (reply.failed()) {
-				LOGGER.info(reply.cause());
+				LOGGER.error(reply.cause());
 				resultHandler.handle(Future.failedFuture(reply.cause().toString()));
 			} else {
 				resultHandler.handle(Future.succeededFuture(reply.result().get(0).getLong("count")));
@@ -73,9 +87,9 @@ public class DataAssetManager {
 	}
 
 	public void countPublished(Handler<AsyncResult<Long>> resultHandler) {
-		dbService.query("SELECT COUNT(d) FROM DataAsset d WHERE d.status = ?",new JsonArray(Arrays.asList(DataAssetStatus.PUBLISHED.ordinal())), reply -> {
+		dbService.query(COUNTPUBLISHED_QUERY,new JsonArray(Arrays.asList(DataAssetStatus.PUBLISHED.ordinal())), reply -> {
 			if (reply.failed()) {
-				LOGGER.info(reply.cause());
+				LOGGER.error(reply.cause());
 				resultHandler.handle(Future.failedFuture(reply.cause().toString()));
 			} else {
 				resultHandler.handle(Future.succeededFuture(reply.result().get(0).getLong("count")));
@@ -83,15 +97,10 @@ public class DataAssetManager {
 		});
 	}
 
-	public void resourceIdExists(Long id, Handler<AsyncResult<Boolean>> resultHandler) {
-
-	}
-
 	public void changeStatus(DataAssetStatus status, Long id, Handler<AsyncResult<Void>> resultHandler) {
-		Date d = new Date();
-		dbService.update("UPDATE DataAsset SET status = ?, updated_at = ? WHERE id = ?",new JsonArray().add(status.ordinal()).add(d.toInstant()).add(id), reply -> {
+		dbService.update(CHANGESTATUS_UPDATE,new JsonArray().add(status.ordinal()).add(id), reply -> {
 			if (reply.failed()) {
-				LOGGER.info(reply.cause());
+				LOGGER.error(reply.cause());
 				resultHandler.handle(Future.failedFuture(reply.cause().toString()));
 			} else {
 				resultHandler.handle(Future.succeededFuture());
@@ -105,22 +114,25 @@ public class DataAssetManager {
 				.add(d.toInstant())
 				.add(d.toInstant());
 
-		dbService.update("INSERT INTO DataAsset (created_at, updated_at) values(?,?)",params, reply -> {
+		dbService.update(ADDINITIAL_UPDATE, params, reply -> {
 			if (reply.succeeded()) {
-				dbService.query("SELECT id FROM dataasset WHERE created_at = ? ",new JsonArray().add(d.toInstant()), reply2 -> {
+				dbService.query(GETID_QUERY, new JsonArray().add(d.toInstant()), reply2 -> {
 					if(reply2.succeeded()){
 						if(reply2.result().size() == 1) {
 							resultHandler.handle(Future.succeededFuture(reply2.result().get(0).getLong("id")));
 						}
 						else{
+							LOGGER.error("Concurrency exception.");
 							resultHandler.handle(Future.failedFuture("Concurrency exception."));
 						}
 					}
 					else{
-						resultHandler.handle(Future.failedFuture(reply2.cause().toString()));
+						LOGGER.error(reply2.cause());
+						resultHandler.handle(Future.failedFuture(reply2.cause()));
 					}
 				});
 			} else {
+				LOGGER.error(reply.cause());
 				resultHandler.handle(Future.failedFuture(reply.cause()));
 			}
 		});
@@ -130,13 +142,7 @@ public class DataAssetManager {
 
 		DataAsset dataAsset = Json.decodeValue(dataAssetJson.toString(),DataAsset.class);
 
-		String update = "Update DataAsset SET updated_at = ?, datasetid = ?, name = ?, url = ?, format = ?, licenseurl = ?, "
-				+ "licensetitle = ?, datasettitle = ?, datasetnotes = ?, orignalresourceurl = ?, orignaldataseturl = ?, "
-				+ "signature = ?, status = ?, resourceid = ?, tags = ?, datasetdescription = ?, organizationtitle = ?, "
-				+ "organizationdescription = ?, version = ?, sourceid = ? WHERE id = ?";
-		Date d = new Date();
 		JsonArray params = new JsonArray()
-				.add(d.toInstant())
 				.add(checkNull(dataAsset.getDatasetID()))
 				.add(checkNull(dataAsset.getName()))
 				.add(checkNull(dataAsset.getUrl()))
@@ -158,9 +164,9 @@ public class DataAssetManager {
 				.add(checkNull(dataAsset.getSourceID().toString()))
 				.add(dataAsset.getId());
 
-		dbService.update(update,params, reply -> {
+		dbService.update(ADD_UPDATE,params, reply -> {
 			if (reply.failed()) {
-				LOGGER.info(reply.cause());
+				LOGGER.error(reply.cause());
 				resultHandler.handle(Future.failedFuture(reply.cause().toString()));
 			} else {
 				resultHandler.handle(Future.succeededFuture());
@@ -169,9 +175,9 @@ public class DataAssetManager {
 	}
 
 	public void delete(Long id, Handler<AsyncResult<Void>> resultHandler) {
-		dbService.update("DELETE FROM dataasset WHERE id = ?",new JsonArray().add(id), reply -> {
+		dbService.update(DELETE_UPDATE, new JsonArray().add(id), reply -> {
 			if (reply.failed()) {
-				LOGGER.info(reply.cause());
+				LOGGER.error(reply.cause());
 				resultHandler.handle(Future.failedFuture(reply.cause().toString()));
 			} else {
 				resultHandler.handle(Future.succeededFuture());

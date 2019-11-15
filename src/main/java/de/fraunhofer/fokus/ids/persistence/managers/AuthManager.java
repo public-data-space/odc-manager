@@ -16,13 +16,17 @@ import io.vertx.ext.jwt.JWTOptions;
 import org.mindrot.jbcrypt.BCrypt;
 
 import java.util.Arrays;
-
+/**
+ * @author Vincent Bohlen, vincent.bohlen@fokus.fraunhofer.de
+ */
 public class AuthManager {
 
     private Logger LOGGER = LoggerFactory.getLogger(AuthManager.class.getName());
     private JWTAuth provider;
 
     private DatabaseService dbService;
+
+    private static final String USER_QUERY = "SELECT * FROM public.user WHERE username = ?";
 
     public AuthManager(Vertx vertx) {
         dbService = DatabaseService.createProxy(vertx, Constants.DATABASE_SERVICE);
@@ -40,16 +44,16 @@ public class AuthManager {
 
     public void login(JsonObject credentials, Handler<AsyncResult<String>> resultHandler) {
 
-        dbService.query("SELECT * FROM public.user WHERE username = ?",  new JsonArray(Arrays.asList(credentials.getString("username"))), reply -> {
+        dbService.query(USER_QUERY,  new JsonArray(Arrays.asList(credentials.getString("username"))), reply -> {
             if (reply.failed()) {
-                LOGGER.info(reply.cause());
+                LOGGER.error(reply.cause());
                 resultHandler.handle(Future.failedFuture(reply.cause().toString()));
             } else {
                 if (reply.result().size() > 0) {
                     User user = Json.decodeValue(reply.result().get(0).toString(), User.class);
 
                     if (BCrypt.checkpw(credentials.getString("password"), user.getPassword())) {
-                        resultHandler.handle(Future.succeededFuture(provider.generateToken(new JsonObject().put("sub", user.getUsername()), new JWTOptions().setExpiresInMinutes(10))));
+                        resultHandler.handle(Future.succeededFuture(provider.generateToken(new JsonObject().put("sub", user.getUsername()), new JWTOptions().setExpiresInMinutes(60))));
                     } else {
                         resultHandler.handle(Future.failedFuture("Password is not identical to password in database."));
                     }

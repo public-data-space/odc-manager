@@ -10,7 +10,9 @@ import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
-
+/**
+ * @author Vincent Bohlen, vincent.bohlen@fokus.fraunhofer.de
+ */
 public class DataSourceController {
 
     private Logger LOGGER = LoggerFactory.getLogger(DataSourceController.class.getName());
@@ -29,7 +31,7 @@ public class DataSourceController {
                 resultHandler.handle(Future.succeededFuture(reply2.result()));
             }
             else{
-                LOGGER.info(reply2.cause());
+                LOGGER.error(reply2.cause());
             }
         });
     }
@@ -57,7 +59,7 @@ public class DataSourceController {
                     resultHandler.handle(Future.succeededFuture(jO));
                 }
                 else {
-                    LOGGER.error("DataSource konnte nicht erstellt werden!\n\n"+reply.cause());
+                    LOGGER.error("DataSource konnte nicht erstellt werden!", reply.cause());
                     JsonObject jO = new JsonObject();
                     jO.put("status", "error");
                     jO.put("text", "DataSource konnte nicht erstellt werden!");
@@ -76,7 +78,7 @@ public class DataSourceController {
                 resultHandler.handle(Future.succeededFuture(jO));
             }
             else {
-                LOGGER.error("DataSource konnte nicht gelöscht werden!\n\n"+reply.cause());
+                LOGGER.error("DataSource konnte nicht gelöscht werden!", reply.cause());
                 JsonObject jO = new JsonObject();
                 jO.put("status", "error");
                 jO.put("text", "DataSource konnte nicht gelöscht werden!");
@@ -94,7 +96,7 @@ public class DataSourceController {
                 resultHandler.handle(Future.succeededFuture(jO));
             }
             else {
-                LOGGER.error("DataSource konnte nicht geändert werden!\n\n"+reply.cause());
+                LOGGER.error("DataSource konnte nicht geändert werden!", reply.cause());
                 JsonObject jO = new JsonObject();
                 jO.put("status", "error");
                 jO.put("text", "DataSource konnte nicht geändert werden!");
@@ -109,7 +111,7 @@ public class DataSourceController {
                 resultHandler.handle(Future.succeededFuture(reply.result()));
             }
             else {
-                LOGGER.error("DataSources not found. Cause: "+ reply.cause());
+                LOGGER.error("DataSources not found.", reply.cause());
                 resultHandler.handle(Future.failedFuture(reply.cause()));
             }
         });
@@ -121,7 +123,7 @@ public class DataSourceController {
                 resultHandler.handle(Future.succeededFuture(reply.result()));
             }
             else {
-                LOGGER.error("DataSources not found. Cause: "+ reply.cause());
+                LOGGER.error("DataSources not found.", reply.cause());
                 resultHandler.handle(Future.failedFuture(reply.cause()));
             }
         });
@@ -143,7 +145,7 @@ public class DataSourceController {
                         });
             }
             else {
-                LOGGER.error("DataSource not found. Cause: "+ reply.cause());
+                LOGGER.error("DataSource not found.", reply.cause());
                 resultHandler.handle(Future.failedFuture(reply.cause()));
             }
         });
@@ -156,7 +158,7 @@ public class DataSourceController {
                 resultHandler.handle(Future.succeededFuture(result));
             }
             else {
-                LOGGER.error("DataSources not found. Cause: "+ reply.cause());
+                LOGGER.error("DataSources not found.", reply.cause());
                 resultHandler.handle(Future.failedFuture(reply.cause()));
             }
         });

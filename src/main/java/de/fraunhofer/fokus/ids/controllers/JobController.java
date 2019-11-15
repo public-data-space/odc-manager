@@ -6,7 +6,9 @@ import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
-
+/**
+ * @author Vincent Bohlen, vincent.bohlen@fokus.fraunhofer.de
+ */
 public class JobController extends AbstractVerticle {
 
 	private Logger LOGGER = LoggerFactory.getLogger(JobController.class.getName());
@@ -22,7 +24,7 @@ public class JobController extends AbstractVerticle {
 				resultHandler.handle(Future.succeededFuture(reply.result()));
 			}
 			else {
-				LOGGER.error("DataAsset could not be read.\n\n"+reply.cause());
+				LOGGER.error("DataAsset could not be read.",reply.cause());
 				resultHandler.handle(Future.failedFuture(reply.cause()));
 			}
 		});
@@ -37,7 +39,7 @@ public class JobController extends AbstractVerticle {
 				resultHandler.handle(Future.succeededFuture(jO));
 			}
     		else{
-				LOGGER.error("Jobs konnten nicht gelöscht werden!\n\n"+reply.cause());
+				LOGGER.error("Jobs konnten nicht gelöscht werden!", reply.cause());
 				JsonObject jO = new JsonObject();
 				jO.put("status", "error");
 				jO.put("text", "Jobs konnten nicht gelöscht werden!");

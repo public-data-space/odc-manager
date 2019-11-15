@@ -12,8 +12,9 @@ import io.vertx.core.logging.LoggerFactory;
 import io.vertx.ext.asyncsql.PostgreSQLClient;
 import io.vertx.ext.sql.SQLClient;
 import io.vertx.serviceproxy.ServiceBinder;
-
-
+/**
+ * @author Vincent Bohlen, vincent.bohlen@fokus.fraunhofer.de
+ */
 public class DatabaseServiceVerticle extends AbstractVerticle {
 
     private Logger LOGGER = LoggerFactory.getLogger(DatabaseServiceVerticle.class.getName());
@@ -48,7 +49,7 @@ public class DatabaseServiceVerticle extends AbstractVerticle {
                         LOGGER.info("Databaseservice successfully started.");
                         startFuture.complete();
                     } else {
-                        LOGGER.info(ready.cause());
+                        LOGGER.error(ready.cause());
                         startFuture.fail(ready.cause());
                     }
                 });

@@ -1,17 +1,14 @@
 package de.fraunhofer.fokus.ids.main;
 
-import de.fraunhofer.fokus.ids.controllers.ConnectorController;
-import de.fraunhofer.fokus.ids.controllers.DataAssetController;
-import de.fraunhofer.fokus.ids.controllers.DataSourceController;
-import de.fraunhofer.fokus.ids.controllers.JobController;
+import de.fraunhofer.fokus.ids.controllers.*;
 import de.fraunhofer.fokus.ids.models.DataAssetDescription;
-import de.fraunhofer.fokus.ids.models.DataRequest;
 import de.fraunhofer.fokus.ids.models.ReturnObject;
 import de.fraunhofer.fokus.ids.persistence.entities.DataSource;
 import de.fraunhofer.fokus.ids.persistence.managers.AuthManager;
+import de.fraunhofer.fokus.ids.persistence.managers.BrokerManager;
+import de.fraunhofer.fokus.ids.persistence.managers.ConfigManager;
 import de.fraunhofer.fokus.ids.persistence.service.DatabaseServiceVerticle;
 import de.fraunhofer.fokus.ids.services.InitService;
-import de.fraunhofer.fokus.ids.services.datasourceAdapter.DataSourceAdapterService;
 import de.fraunhofer.fokus.ids.services.datasourceAdapter.DataSourceAdapterServiceVerticle;
 import io.vertx.config.ConfigRetriever;
 import io.vertx.config.ConfigRetrieverOptions;
@@ -33,7 +30,9 @@ import org.apache.http.entity.ContentType;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
-
+/**
+ * @author Vincent Bohlen, vincent.bohlen@fokus.fraunhofer.de
+ */
 public class MainVerticle extends AbstractVerticle{
 	private Logger LOGGER = LoggerFactory.getLogger(MainVerticle.class.getName());
 	private Router router;
@@ -42,6 +41,9 @@ public class MainVerticle extends AbstractVerticle{
 	private DataAssetController dataAssetController;
 	private DataSourceController dataSourceController;
 	private JobController jobController;
+	private BrokerController brokerController;
+	private BrokerManager brokerManager;
+	private ConfigManager configManager;
 	private int servicePort;
 
 	@Override
@@ -51,6 +53,9 @@ public class MainVerticle extends AbstractVerticle{
 		this.dataAssetController = new DataAssetController(vertx);
 		this.dataSourceController = new DataSourceController(vertx);
 		this.jobController = new JobController(vertx);
+		this.brokerController = new BrokerController(vertx);
+		this.brokerManager = new BrokerManager(vertx);
+		this.configManager = new ConfigManager(vertx);
 
 		DeploymentOptions deploymentOptions = new DeploymentOptions();
 		deploymentOptions.setWorker(true);
@@ -84,26 +89,24 @@ public class MainVerticle extends AbstractVerticle{
 					});
 					return envFuture;
 				}).setHandler( ar -> {
-			if (ar.succeeded()) {
-				LOGGER.info("Services successfully started.");
-				InitService initService = new InitService(vertx);
-				initService.initDatabase(reply -> {
-					if(reply.succeeded()){
-						LOGGER.info("Adminaccount successfully created.");
-						router = Router.router(vertx);
-						createHttpServer(vertx);
-						startFuture.complete();
-					}
-					else{
-						LOGGER.info(reply.cause());
+					if (ar.succeeded()) {
+						InitService initService = new InitService(vertx);
+						initService.initDatabase(reply -> {
+							if(reply.succeeded()){
+								router = Router.router(vertx);
+								createHttpServer(vertx);
+								startFuture.complete();
+							}
+							else{
+								LOGGER.error(reply.cause());
+								startFuture.fail(ar.cause());
+							}
+						});
+					} else {
+						LOGGER.error(ar.cause());
 						startFuture.fail(ar.cause());
 					}
 				});
-			} else {
-				LOGGER.info(ar.cause());
-				startFuture.fail(ar.cause());
-			}
-		});
 
 	}
 
@@ -151,11 +154,11 @@ public class MainVerticle extends AbstractVerticle{
 						replyWithContentType(result, routingContext.response())));
 
 		router.route("/data/:id.:extension").handler(routingContext ->
-				connectorController.data(new DataRequest(routingContext.request().getParam("id"), routingContext.request().getParam("extension")), result ->
+				connectorController.data(Long.parseLong(routingContext.request().getParam("id")), routingContext.request().getParam("extension"), result ->
 					replyWithContentType(result, routingContext.response())));
 
 		router.route("/data/:id").handler(routingContext ->
-				connectorController.data(new DataRequest(routingContext.request().getParam("id"), ""), result ->
+				connectorController.data(Long.parseLong(routingContext.request().getParam("id")), "", result ->
 					replyWithContentType(result, routingContext.response())));
 
 
@@ -216,6 +219,29 @@ public class MainVerticle extends AbstractVerticle{
 		router.route("/api/datasources/schema/type/:type").handler(routingContext ->
 				dataSourceController.getFormSchema(routingContext.request().getParam("type"), result -> reply(result, routingContext.response())));
 
+		router.route("/api/datasources/schema/type/:type").handler(routingContext ->
+				dataSourceController.getFormSchema(routingContext.request().getParam("type"), result -> reply(result, routingContext.response())));
+
+		router.post("/api/broker/add/").handler(routingContext ->
+				brokerController.add(routingContext.getBodyAsJson().getString("url"), result -> reply(result, routingContext.response())));
+
+		router.route("/api/broker/unregister/:id").handler(routingContext ->
+				brokerController.unregister(Long.parseLong(routingContext.request().getParam("id")), result -> reply(result, routingContext.response())));
+
+		router.route("/api/broker/register/:id").handler(routingContext ->
+				brokerController.register(Long.parseLong(routingContext.request().getParam("id")), result -> reply(result, routingContext.response())));
+
+		router.route("/api/broker/findAll").handler(routingContext ->
+				brokerManager.findAll(result -> reply(result, routingContext.response())));
+
+		router.route("/api/broker/delete/:id").handler(routingContext ->
+				brokerController.delete(Long.parseLong(routingContext.request().getParam("id")), result -> reply(result, routingContext.response())));
+
+		router.route("/api/configuration/get").handler(routingContext ->
+				configManager.getConfiguration(result -> reply(result, routingContext.response())));
+
+		router.post("/api/configuration/edit").handler(routingContext ->
+				configManager.editConfiguration(routingContext.getBodyAsJson(), result -> reply(result, routingContext.response())));
 
 		server.requestHandler(router).listen(servicePort);
 		LOGGER.info("odc-manager deployed on port "+servicePort);
@@ -254,7 +280,7 @@ public class MainVerticle extends AbstractVerticle{
 			if(result.result() != null) {
 				ReturnObject returnObject = result.result();
 				String entity = returnObject.getEntity();
-				response.putHeader("content-type", returnObject.getTypeWrapper().getContentType());
+				response.putHeader("content-type", returnObject.getType());
 				response.end(entity);
 			}
 			else{

@@ -10,7 +10,9 @@ import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
 import io.vertx.ext.web.client.WebClient;
 import io.vertx.serviceproxy.ServiceBinder;
-
+/**
+ * @author Vincent Bohlen, vincent.bohlen@fokus.fraunhofer.de
+ */
 public class DataSourceAdapterServiceVerticle extends AbstractVerticle {
 
     private Logger LOGGER = LoggerFactory.getLogger(DataSourceAdapterServiceVerticle.class.getName());
@@ -37,12 +39,12 @@ public class DataSourceAdapterServiceVerticle extends AbstractVerticle {
                         LOGGER.info("Datasourceadapterservice successfully started.");
                         startFuture.complete();
                     } else {
-                        LOGGER.info(ready.cause());
+                        LOGGER.error(ready.cause());
                         startFuture.fail(ready.cause());
                     }
                 });
             } else {
-                LOGGER.info(ar.cause());
+                LOGGER.error(ar.cause());
                 startFuture.fail(ar.cause());
             }
         });

@@ -1,117 +1,199 @@
 package de.fraunhofer.fokus.ids.services;
 
+import de.fraunhofer.fokus.ids.models.Constants;
 import de.fraunhofer.fokus.ids.persistence.entities.DataAsset;
 import de.fraunhofer.fokus.ids.persistence.managers.DataAssetManager;
+import de.fraunhofer.fokus.ids.persistence.service.DatabaseService;
 import de.fraunhofer.iais.eis.*;
-import de.fraunhofer.iais.eis.util.ConstraintViolationException;
 import de.fraunhofer.iais.eis.util.PlainLiteral;
 import io.vertx.core.*;
 import io.vertx.core.json.Json;
 import io.vertx.core.json.JsonArray;
+import io.vertx.core.json.JsonObject;
 import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
 
 import javax.xml.datatype.DatatypeConfigurationException;
 import javax.xml.datatype.DatatypeFactory;
 import javax.xml.datatype.XMLGregorianCalendar;
-import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.net.URL;
 import java.text.DateFormat;
-import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.List;
-
+/**
+ * @author Vincent Bohlen, vincent.bohlen@fokus.fraunhofer.de
+ */
 public class IDSService {
-	final Logger LOGGER = LoggerFactory.getLogger(IDSService.class.getName());
+	private final Logger LOGGER = LoggerFactory.getLogger(IDSService.class.getName());
 
-	private String INFO_MODEL_VERSION = "1.0.2";
-	private String[] SUPPORTED_INFO_MODEL_VERSIONS = {"1.0.0.","1.0.1","1.0.2"};
-	private String baseURL;
-	private String connectorURL;
+	private String INFO_MODEL_VERSION = "2.0.0";
+	private String[] SUPPORTED_INFO_MODEL_VERSIONS = {"2.0.0"};
 	private DataAssetManager dataAssetManager;
+	private DatabaseService databaseService;
 
 	public IDSService(Vertx vertx){
 		dataAssetManager = new DataAssetManager(vertx);
+		databaseService = DatabaseService.createProxy(vertx, Constants.DATABASE_SERVICE);
 	}
 
-	private String getPayloadURL(Long id) {
-		//TODO FIX THIS
-		return "http://127.0.0.1:8080/payload/";
-	}
-
-	public SelfDescriptionResponse getSelfDescriptionResponse() {
-		//TODO FIX THIS
-		this.connectorURL = "http://127.0.0.1:8080";
-		try {
-			return buildSelfDescriptionResponse();
-		} catch (MalformedURLException e) {
-			LOGGER.error("Exception:",e);
-		} catch (ConstraintViolationException e) {
-			LOGGER.error("Exception:",e);
-		} catch (DatatypeConfigurationException e) {
-			LOGGER.error("Exception:",e);
-		}
-		return null;
-
-	}
-
-	public void getConnector(Handler<AsyncResult<Connector>> resultHandler) {
-		this.baseURL = "http://127.0.0.1:8080";
-		this.connectorURL = "http://127.0.0.1:8080";
-
-		buildBaseConnector(reply -> {
-			if(reply.succeeded()){
-				resultHandler.handle(Future.succeededFuture(reply.result()));
-			}
-			else{
-				resultHandler.handle(Future.failedFuture(reply.cause()));
+	public void getSelfDescriptionResponse(Handler<AsyncResult<SelfDescriptionResponse>> resultHandler) {
+		getConfiguration(config -> {
+			if(config.succeeded()){
+				resultHandler.handle(Future.succeededFuture( buildSelfDescriptionResponse(config.result())));
+			} else {
+				LOGGER.error(config.cause());
+				resultHandler.handle(Future.failedFuture(config.cause()));
 			}
 		});
 	}
 
-	private SelfDescriptionResponse buildSelfDescriptionResponse() throws MalformedURLException, ConstraintViolationException, DatatypeConfigurationException {
+	private XMLGregorianCalendar getDate(){
 		GregorianCalendar c = new GregorianCalendar();
 		c.setTime(new Date());
-		XMLGregorianCalendar xmlDate = DatatypeFactory.newInstance().newXMLGregorianCalendar(c);
-
-		return new SelfDescriptionResponseBuilder(new URL(this.connectorURL +"#SelfDescriptionResponse"))
-				._issued_(xmlDate)
-				._issuerConnector_(new URL(this.connectorURL))
-				._modelVersion_(INFO_MODEL_VERSION)
-				.build();
+		try {
+			return DatatypeFactory.newInstance().newXMLGregorianCalendar(c);
+		} catch (DatatypeConfigurationException e) {
+			LOGGER.error(e);
+		}
+		return null;
 	}
 
+	public void createRegistrationMessage(Handler<AsyncResult<ConnectorAvailableMessage>> resultHandler){
 
+		getConfiguration(config -> {
+			if(config.succeeded()){
+				try {
+					ConnectorAvailableMessage message = new ConnectorAvailableMessageBuilder()
+							._issued_(getDate())
+							._modelVersion_("2.0.0")
+							._issuerConnector_(new URI(config.result().getString("url")))
+							._securityToken_( new DynamicAttributeTokenBuilder()
+									._tokenFormat_(TokenFormat.JWT)
+									._tokenValue_(getJWT())
+									.build())
+							.build();
+					resultHandler.handle(Future.succeededFuture(message));
+				} catch (URISyntaxException e) {
+					LOGGER.error(e);
+					resultHandler.handle(Future.failedFuture(e));
+				}
+			} else {
+				LOGGER.error(config.cause());
+				resultHandler.handle(Future.failedFuture(config.cause()));
+			}
+		});
+	}
 
-	private void buildBaseConnector(Handler<AsyncResult<Connector>> next){
+	public void createUpdateMessage(Handler<AsyncResult<ConnectorUpdateMessage>> resultHandler){
 
-		Future<Catalog> catalogFuture = buildCatalog();
+		getConfiguration(config -> {
+			if(config.succeeded()){
+				try {
+					ConnectorUpdateMessage message = new ConnectorUpdateMessageBuilder()
+							._issued_(getDate())
+							._modelVersion_("2.0.0")
+							._issuerConnector_(new URI(config.result().getString("url")))
+							._securityToken_( new DynamicAttributeTokenBuilder()
+									._tokenFormat_(TokenFormat.JWT)
+									._tokenValue_(getJWT())
+									.build())
+							.build();
+					resultHandler.handle(Future.succeededFuture(message));
+				} catch (URISyntaxException e) {
+					LOGGER.error(e);
+					resultHandler.handle(Future.failedFuture(e));
+				}
+			} else {
+				LOGGER.error(config.cause());
+				resultHandler.handle(Future.failedFuture(config.cause()));
+			}
+		});
+	}
+
+	public void createUnregistrationMessage(Handler<AsyncResult<ConnectorUnavailableMessage>> resultHandler){
+
+		getConfiguration(config -> {
+			if(config.succeeded()){
+				try {
+					ConnectorUnavailableMessage message = new ConnectorUnavailableMessageBuilder()
+							._issued_(getDate())
+							._modelVersion_("2.0.0")
+							._issuerConnector_(new URI(config.result().getString("url")))
+							._securityToken_( new DynamicAttributeTokenBuilder()
+									._tokenFormat_(TokenFormat.JWT)
+									._tokenValue_(getJWT())
+									.build())
+							.build();
+					resultHandler.handle(Future.succeededFuture(message));
+				} catch (URISyntaxException e) {
+					LOGGER.error(e);
+					resultHandler.handle(Future.failedFuture(e));
+				}
+			} else {
+				LOGGER.error(config.cause());
+				resultHandler.handle(Future.failedFuture(config.cause()));
+			}
+		});
+	}
+
+	public void getConnector(Handler<AsyncResult<Connector>> resultHandler) {
+
+		getConfiguration(configReply -> {
+			if(configReply.succeeded()) {
+				buildBaseConnector(configReply.result(), reply -> {
+					if (reply.succeeded()) {
+						resultHandler.handle(Future.succeededFuture(reply.result()));
+					} else {
+						LOGGER.error(reply.cause());
+						resultHandler.handle(Future.failedFuture(reply.cause()));
+					}
+				});
+			}
+			else{
+				LOGGER.error("Configuration could not be retrieved.");
+				resultHandler.handle(Future.failedFuture(configReply.cause()));
+			}
+		});
+	}
+
+	private SelfDescriptionResponse buildSelfDescriptionResponse(JsonObject config){
+
 		try {
-			BaseConnectorBuilder connectorBuilder = new BaseConnectorBuilder((new URL(this.connectorURL)))
-					._maintainer_(new URL("http://ids.fokus.fraunhofer.de"))
+			return new SelfDescriptionResponseBuilder(new URI(config.getString("url") +"#SelfDescriptionResponse"))
+					._issued_(getDate())
+					._issuerConnector_(new URI(config.getString("url")))
+					._modelVersion_(INFO_MODEL_VERSION)
+					.build();
+		} catch (URISyntaxException e) {
+			LOGGER.error(e);
+		}
+		return null;
+	}
+
+	private void buildBaseConnector(JsonObject config, Handler<AsyncResult<Connector>> next){
+
+		Future<Catalog> catalogFuture = buildCatalog(config);
+		try {
+			BaseConnectorBuilder connectorBuilder = new BaseConnectorBuilder((new URI(config.getString("url") + "#Connector")))
+					._maintainer_(new URI(config.getString("maintainer")))
 					._version_("0.0.1")
-					//TODO Curator?
-					._curator_(new URL("http://ids.fokus.fraunhofer.de"))
+					._curator_(new URI(config.getString("curator")))
 					._outboundModelVersion_(INFO_MODEL_VERSION)
-					//TODO Consume versions?
-					._inboundModelVersions_(new ArrayList<>(Arrays.asList(SUPPORTED_INFO_MODEL_VERSIONS)))
+					._inboundModelVersion_(new ArrayList<>(Arrays.asList(SUPPORTED_INFO_MODEL_VERSIONS)))
+
 					//TODO Change dummy auth service (can be null)
 					//				._authInfo_(new AuthInfoBuilder(new URL(this.connectorURL + "#AuthInfo"))
 					//						._authService_(new URI(this.connectorURL + "#AuthService"))
 					//						._authStandard_(AuthStandard.OAUTH2_JWT)
 					//						.build())
-					//TODO Check security profile
-					._securityProfile_(new SecurityProfileBuilder(new URL(this.connectorURL + "#SecurityProfile"))
-							._basedOn_(PredefinedSecurityProfile.BASECONNECTORSECURITYPROFILE)
-							._authenticationSupport_(AuthenticationSupport.NO_AUTHENTICATION)
-							.build())
-					._titles_(new ArrayList<>(Arrays.asList(new PlainLiteral("IDS Connector for Open Data", "en"))))
-					//TODO Change dummy host
+
+					._securityProfile_(SecurityProfile.BASE_CONNECTOR_SECURITY_PROFILE)
+					._title_(new ArrayList<>(Arrays.asList(new PlainLiteral(config.getString("title"), ""))))
+
 					._hosts_(new ArrayList<>(Arrays.asList(new HostBuilder()
-							._accessUrl_(new URI(this.connectorURL))
+							._accessUrl_(new URI(config.getString("url")))
 							._protocol_(Protocol.HTTP)
 							.build())));
 
@@ -133,29 +215,26 @@ public class IDSService {
 			});
 
 		} catch (Exception e) {
-			LOGGER.error("", e);
+			LOGGER.error(e);
 			next.handle(Future.failedFuture(e.getMessage()));
 		}
 	}
 
-	private Future<Catalog> buildCatalog() {
+	private Future<Catalog> buildCatalog(JsonObject config) {
 
-		Future<List<Resource>> offers = getOfferResources();
-		Future<List<Resource>> requests = getRequestResources();
+		Future<List<Resource>> offers = getOfferResources(config);
+		Future<List<Resource>> requests = getRequestResources(config);
 		Future<Catalog> catalog = Future.future();
 
 		CompositeFuture.all(offers, requests).setHandler(cf -> {
 			if(cf.succeeded()) {
 				try {
-					catalog.complete(new CatalogBuilder(new URL(this.connectorURL + "#Catalog"))
-							._offers_(new ArrayList(offers.result()))
-							._requests_(new ArrayList(requests.result()))
+					catalog.complete(new CatalogBuilder(new URI(config.getString("url") + "#Catalog"))
+							._offer_(new ArrayList(offers.result()))
+							._request_(new ArrayList(requests.result()))
 							.build());
-				} catch (MalformedURLException e) {
-					LOGGER.error("Exception:", e);
-					catalog.fail(e.getMessage());
-				} catch (ConstraintViolationException e) {
-					LOGGER.error("Exception:", e);
+				} catch (Exception e) {
+					LOGGER.error(e);
 					catalog.fail(e.getMessage());
 				}
 			}
@@ -167,24 +246,24 @@ public class IDSService {
 		return catalog;
 	}
 
-	private Future<List<Resource>> getRequestResources() {
+	private Future<List<Resource>> getRequestResources(JsonObject config) {
 		// TODO Auto-generated method stub
 		return Future.succeededFuture(new ArrayList<>());
 	}
 
-	private Future<List<Resource>> getOfferResources() {
+	private Future<List<Resource>> getOfferResources(JsonObject config) {
 		Future<List<Resource>> daFuture = Future.future();
-		findPublished(daList -> createDataResources(daList, daFuture));
+		findPublished(daList -> createDataResources(config, daList, daFuture));
 		return daFuture;
 	}
 
-	private void createDataResources(AsyncResult<List<DataAsset>> daList, Future<List<Resource>> daFuture) {
+	private void createDataResources( JsonObject config, AsyncResult<List<DataAsset>> daList, Future<List<Resource>> daFuture) {
 		if(daList.succeeded()) {
 			List<DataAsset> das = daList.result();
-			ArrayList<Resource> offerResources = new ArrayList<Resource>();
+			ArrayList<Resource> offerResources = new ArrayList<>();
 			for (DataAsset da : das) {
 				try {
-					DataResourceBuilder r = new DataResourceBuilder(new URL(getPayloadURL(da.getId()) + "#DataResource"))
+					DataResourceBuilder r = new DataResourceBuilder(new URI(config.getString("url") + "#DataResource"))
 							//						//TODO: The regular period with which items are added to a collection.
 							//						._accrualPeriodicity_(null)
 							//						//TODO: Reference to a Digital Content (physically or logically) included, definition of part-whole hierarchies.
@@ -223,30 +302,26 @@ public class IDSService {
 							//						._variant_(null)
 
 							._version_(da.getVersion())
-							._resourceEndpoints_(getResourceEndpoint(da))
-							._publisher_(getAgent(da.getId(), "Publisher", "", ""))
-							._sovereign_(getAgent(da.getId(), "Sovereign", da.getOrganizationDescription(), da.getOrganizationTitle()));
+							._resourceEndpoint_(getResourceEndpoint(config, da))
+							._publisher_(getAgent(config, "Publisher", "", ""))
+							._sovereign_(getAgent(config, "Sovereign", da.getOrganizationDescription(), da.getOrganizationTitle()));
 					if (da.getDatasetTitle() != null) {
-						r._titles_(new ArrayList<>(Arrays.asList(new PlainLiteral(da.getDatasetTitle()))));
+						r._title_(new ArrayList<>(Arrays.asList(new PlainLiteral(da.getDatasetTitle()))));
 					}
 					if (da.getDataSetDescription() != null) {
-						r._descriptions_(new ArrayList<>(Arrays.asList(new PlainLiteral(da.getDataSetDescription()))));
+						r._description_(new ArrayList<>(Arrays.asList(new PlainLiteral(da.getDataSetDescription()))));
 					}
 					ArrayList<PlainLiteral> keywords = getKeyWords(da);
 					if (keywords != null) {
-						r._keywords_(getKeyWords(da));
+						r._keyword_(getKeyWords(da));
 					}
 					if (da.getLicenseUrl() != null) {
 						r._customLicense_(new URI(da.getLicenseUrl()));
 					}
 
 					offerResources.add(r.build());
-				} catch (MalformedURLException e) {
-					LOGGER.error("Exception:", e);
-				} catch (ConstraintViolationException e) {
-					LOGGER.error("Exception:", e);
-				} catch (URISyntaxException e) {
-					LOGGER.error("Exception:", e);
+				} catch (Exception e) {
+					LOGGER.error( e);
 				}
 			}
 			daFuture.complete(offerResources);
@@ -266,34 +341,31 @@ public class IDSService {
 				next.handle(Future.succeededFuture(assets));
 			}
 			else{
+				LOGGER.error(reply.cause());
 				next.handle(Future.succeededFuture(new ArrayList<>()));
 			}
 		});
 	}
 
-	private ArrayList<? extends Endpoint> getResourceEndpoint(DataAsset da) {
+	private ArrayList<? extends Endpoint> getResourceEndpoint(JsonObject config, DataAsset da) {
 		ArrayList<Endpoint> endpoints = new ArrayList<>();
 		Endpoint e;
 		try {
-			e = new StaticEndpointBuilder(new URL(getPayloadURL(da.getId())+"#ResourceEndpoint"))
-					._endpointArtifact_(new ArtifactBuilder(new URL(getPayloadURL(da.getId())+"#Artifact"))
+			e = new StaticEndpointBuilder(new URI(config.getString("url")+"#ResourceEndpoint"))
+					._endpointArtifact_(new ArtifactBuilder(new URI(config.getString("url")+"#Artifact"))
 							._creationDate_(getDate(da.getCreatedAt()))
-							._fileName_(da.getResourceID())
+							._fileName_(da.getId().toString())
 							.build())
-					._endpointHost_(new HostBuilder(new URL(getPayloadURL(da.getId())+"#Host"))
-							._accessUrl_(new URI(getPayloadURL(da.getId())))
+					._endpointHost_(new HostBuilder(new URI(config.getString("url")+"#Host"))
+							._accessUrl_(new URI(config.getString("url")))
 							._pathPrefix_("/")
 							._protocol_(Protocol.HTTP)
 							.build())
-					._path_(getPayloadURL(da.getId()))
+					._path_("/data/")
 					.build();
 			endpoints.add(e);
-		} catch (MalformedURLException e1) {
-			LOGGER.error("Exception:",e1);
-		} catch (ConstraintViolationException e1) {
-			LOGGER.error("Exception:",e1);
-		} catch (URISyntaxException e1) {
-			LOGGER.error("Exception:",e1);
+		} catch (Exception e1) {
+			LOGGER.error(e1);
 		}
 		return endpoints;
 	}
@@ -303,33 +375,27 @@ public class IDSService {
 			DateFormat format = new SimpleDateFormat("YYYY-MM-dd'T'HH:mm:ss.SSSSSS");
 			String date = format.format(createdAt);
 
-
 			GregorianCalendar cal = new GregorianCalendar();
 			cal.setTime(format.parse(date));
 
 			return  DatatypeFactory.newInstance().newXMLGregorianCalendar(cal);
-
-		} catch (ParseException e) {
-			LOGGER.error("Exception:",e);
-		} catch (DatatypeConfigurationException e) {
-			LOGGER.error("Exception:",e);
+		} catch (Exception e) {
+			LOGGER.error(e);
 		}
 		return null;
 	}
 
-	private Agent getAgent(Long id, String agentRole, String agentDescription , String agentTitle) {
+	private Agent getAgent(JsonObject config, String agentRole, String agentDescription , String agentTitle) {
 		Agent agent = null;
 		PlainLiteral desc = agentDescription != null ? new PlainLiteral(agentDescription) : null;
 		PlainLiteral title = agentTitle != null ? new PlainLiteral(agentTitle) : null;
 		try {
-			agent = new AgentBuilder(new URL(getPayloadURL(id)+"#"+agentRole))
-					._descriptions_(new ArrayList<>(Arrays.asList(desc)))
-					._titles_(new ArrayList<>(Arrays.asList(title)))
+			agent = new AgentBuilder(new URI(config.getString("url")+"#"+agentRole))
+					._description_(new ArrayList<>(Arrays.asList(desc)))
+					._title_(new ArrayList<>(Arrays.asList(title)))
 					.build();
-		} catch (MalformedURLException e) {
-			LOGGER.error("Exception:",e);
-		} catch (ConstraintViolationException e) {
-			LOGGER.error("Exception:",e);
+		} catch (Exception e) {
+			LOGGER.error(e);
 		}
 		return agent;
 	}
@@ -340,5 +406,27 @@ public class IDSService {
 			keywords.add(new PlainLiteral(tag));
 		}
 		return keywords.isEmpty()? null : keywords;
+	}
+
+	private void getConfiguration(Handler<AsyncResult<JsonObject>> resultHandler){
+
+		databaseService.query("SELECT * FROM configuration", new JsonArray(), reply -> {
+			if(reply.succeeded()){
+				if(reply.result().size() > 0) {
+					resultHandler.handle(Future.succeededFuture(reply.result().get(0)));
+				}
+				else{
+					resultHandler.handle(Future.failedFuture("No config available."));
+				}
+			}
+			else{
+				resultHandler.handle(Future.failedFuture(reply.cause()));
+			}
+		});
+	}
+
+	private String getJWT(){
+		//TODO: implement DAPS and return real token
+		return "abcdefg12";
 	}
 }

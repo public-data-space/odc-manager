@@ -1,7 +1,9 @@
 package de.fraunhofer.fokus.ids.models;
 
 import java.util.Map;
-
+/**
+ * @author Vincent Bohlen, vincent.bohlen@fokus.fraunhofer.de
+ */
 public class DataAssetDescription {
 
     private int sourceId;

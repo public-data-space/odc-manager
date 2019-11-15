@@ -11,9 +11,12 @@ import io.vertx.ext.sql.ResultSet;
 import io.vertx.ext.sql.SQLClient;
 import io.vertx.ext.sql.SQLConnection;
 
+import java.lang.reflect.Array;
 import java.util.ArrayList;
 import java.util.List;
-
+/**
+ * @author Vincent Bohlen, vincent.bohlen@fokus.fraunhofer.de
+ */
 public class DatabaseServiceImpl implements DatabaseService {
     private Logger LOGGER = LoggerFactory.getLogger(DatabaseServiceImpl.class.getName());
     private SQLClient jdbc;
@@ -45,7 +48,7 @@ public class DatabaseServiceImpl implements DatabaseService {
      * @param params Query parameters for the SQL query
      * @param connectionType UPDATE or QUERY depending on the type of database manipulation to be performed
      */
-    public void createResult(String queryString, JsonArray params, ConnectionType connectionType, Handler<AsyncResult<List<JsonObject>>> resultHandler){
+    private void createResult(String queryString, JsonArray params, ConnectionType connectionType, Handler<AsyncResult<List<JsonObject>>> resultHandler){
 
         createConnection(connection -> handleConnection(connection,
                 connectionType,
@@ -68,8 +71,8 @@ public class DatabaseServiceImpl implements DatabaseService {
                 next.handle(Future.succeededFuture(res.result()));
             }
             else{
-                LOGGER.error("Connection could not be established.\n\n" + res.cause().getMessage());
-                next.handle(Future.failedFuture(res.cause().toString()));
+                LOGGER.error("Connection could not be established.", res.cause());
+                next.handle(Future.failedFuture(res.cause()));
             }
         });
     }
@@ -97,7 +100,7 @@ public class DatabaseServiceImpl implements DatabaseService {
                 handleUpdate(result, queryString, params,resultHandler);
                 break;
             default:
-                resultHandler.handle(Future.failedFuture("Unknowne Connection type specified."));
+                resultHandler.handle(Future.failedFuture("Unknown Connection type specified."));
         }
     }
 
@@ -115,7 +118,7 @@ public class DatabaseServiceImpl implements DatabaseService {
                              Handler<AsyncResult<List<JsonObject>>> resultHandler) {
 
         if(result.failed()){
-            LOGGER.error("Connection Future failed.\n\n"+ result.cause());
+            LOGGER.error("Connection Future failed.", result.cause());
             resultHandler.handle(Future.failedFuture(result.cause().toString()));
         }
         else {
@@ -126,8 +129,8 @@ public class DatabaseServiceImpl implements DatabaseService {
                     next.handle(Future.succeededFuture(rs.getRows()));
                     connection.close();
                 } else {
-                    LOGGER.error("Query failed.\n\n" + query.cause().getMessage());
-                    resultHandler.handle(Future.failedFuture(query.cause().toString()));
+                    LOGGER.error("Query failed.", query.cause());
+                    resultHandler.handle(Future.failedFuture(query.cause()));
                     connection.close();
                 }
             });
@@ -146,7 +149,7 @@ public class DatabaseServiceImpl implements DatabaseService {
                               Handler<AsyncResult<List<JsonObject>>> resultHandler) {
 
         if(result.failed()){
-            LOGGER.error("Connection Future failed.\n\n"+ result.cause());
+            LOGGER.error("Connection Future failed.", result.cause());
             resultHandler.handle(Future.failedFuture(result.cause().toString()));
         }
         else {
@@ -157,8 +160,8 @@ public class DatabaseServiceImpl implements DatabaseService {
                     resultHandler.handle(Future.succeededFuture(new ArrayList<>()));
                     connection.close();
                 } else {
-                    LOGGER.error("Update failed.\n\n" + query.cause().getMessage());
-                    resultHandler.handle(Future.failedFuture(query.cause().toString()));
+                    LOGGER.error("Update failed.", query.cause());
+                    resultHandler.handle(Future.failedFuture(query.cause()));
                     connection.close();
                 }
             });
@@ -172,7 +175,7 @@ public class DatabaseServiceImpl implements DatabaseService {
     private void handleResult(AsyncResult<List<JsonObject>> result, Handler<AsyncResult<List<JsonObject>>> resultHandler){
 
         if(result.failed()){
-            LOGGER.error("List<JsonObject> Future failed.\n\n"+ result.cause());
+            LOGGER.error("List<JsonObject> Future failed.", result.cause());
             resultHandler.handle(Future.failedFuture(result.cause().toString()));
         }
         else {

@@ -7,7 +7,9 @@ import io.vertx.core.json.JsonObject;
 import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
 import io.vertx.ext.web.client.WebClient;
-
+/**
+ * @author Vincent Bohlen, vincent.bohlen@fokus.fraunhofer.de
+ */
 public class DataSourceAdapterServiceImpl implements DataSourceAdapterService {
 
     private Logger LOGGER = LoggerFactory.getLogger(DataSourceAdapterServiceImpl.class.getName());
@@ -31,7 +33,7 @@ public class DataSourceAdapterServiceImpl implements DataSourceAdapterService {
                     if (ar.succeeded()) {
                         resultHandler.handle(Future.succeededFuture(ar.result().bodyAsJsonObject()));
                     } else {
-                        LOGGER.error("No response from CKAN.\n\n" + ar.cause().getMessage());
+                        LOGGER.error(ar.cause());
                         resultHandler.handle(Future.failedFuture(ar.cause()));
                     }
                 });
@@ -45,7 +47,7 @@ public class DataSourceAdapterServiceImpl implements DataSourceAdapterService {
                     if (ar.succeeded()) {
                         resultHandler.handle(Future.succeededFuture(ar.result().bodyAsJsonObject()));
                     } else {
-                        LOGGER.error("No response from CKAN.\n\n" + ar.cause().getMessage());
+                        LOGGER.error(ar.cause());
                         resultHandler.handle(Future.failedFuture(ar.cause()));
                     }
                 });
@@ -58,7 +60,7 @@ public class DataSourceAdapterServiceImpl implements DataSourceAdapterService {
             if (reply.succeeded()) {
                 resultHandler.handle(Future.succeededFuture(reply.result()));
             } else {
-                LOGGER.error("No response from CKAN.\n\n" + reply.cause().getMessage());
+                LOGGER.error(reply.cause());
                 resultHandler.handle(Future.failedFuture(reply.cause()));
             }
         });
@@ -71,7 +73,7 @@ public class DataSourceAdapterServiceImpl implements DataSourceAdapterService {
             if (reply.succeeded()) {
                 resultHandler.handle(Future.succeededFuture(reply.result()));
             } else {
-                LOGGER.error("No response from CKAN.\n\n" + reply.cause().getMessage());
+                LOGGER.error(reply.cause());
                 resultHandler.handle(Future.failedFuture(reply.cause()));
             }
         });
@@ -84,7 +86,7 @@ public class DataSourceAdapterServiceImpl implements DataSourceAdapterService {
             if (reply.succeeded()) {
                 resultHandler.handle(Future.succeededFuture(reply.result()));
             } else {
-                LOGGER.error("No response from CKAN.\n\n" + reply.cause().getMessage());
+                LOGGER.error(reply.cause());
                 resultHandler.handle(Future.failedFuture(reply.cause()));
             }
         });
@@ -97,7 +99,7 @@ public class DataSourceAdapterServiceImpl implements DataSourceAdapterService {
             if (reply.succeeded()) {
                 resultHandler.handle(Future.succeededFuture(reply.result()));
             } else {
-                LOGGER.error("No response from CKAN.\n\n" + reply.cause().getMessage());
+                LOGGER.error(reply.cause());
                 resultHandler.handle(Future.failedFuture(reply.cause()));
             }
         });
@@ -110,7 +112,7 @@ public class DataSourceAdapterServiceImpl implements DataSourceAdapterService {
             if (reply.succeeded()) {
                 resultHandler.handle(Future.succeededFuture(reply.result()));
             } else {
-                LOGGER.error("No response from CKAN.\n\n" + reply.cause().getMessage());
+                LOGGER.error(reply.cause());
                 resultHandler.handle(Future.failedFuture(reply.cause()));
             }
         });
@@ -123,7 +125,7 @@ public class DataSourceAdapterServiceImpl implements DataSourceAdapterService {
             if (reply.succeeded()) {
                 resultHandler.handle(Future.succeededFuture(reply.result()));
             } else {
-                LOGGER.error("No response from CKAN.\n\n" + reply.cause().getMessage());
+                LOGGER.error(reply.cause());
                 resultHandler.handle(Future.failedFuture(reply.cause()));
             }
         });

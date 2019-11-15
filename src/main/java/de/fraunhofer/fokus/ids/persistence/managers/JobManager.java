@@ -11,13 +11,20 @@ import io.vertx.core.json.JsonObject;
 import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
 
-import java.util.Date;
 import java.util.HashMap;
-
+/**
+ * @author Vincent Bohlen, vincent.bohlen@fokus.fraunhofer.de
+ */
 public class JobManager {
 
-	DatabaseService dbService;
+	private DatabaseService dbService;
 	private Logger LOGGER = LoggerFactory.getLogger(JobManager.class.getName());
+
+	private static final String ADD_QUERY = "INSERT INTO job (created_at,updated_at,data,status,sourceid, sourcetype) values (NOW(), NOW(), ?, ?, ?, ?)";
+	private static final String FINDALL_QUERY = "SELECT * FROM job";
+	private static final String DELETEALL_QUERY = "DELETE FROM job";
+	private static final String FINDUNFINISHED_QUERY = "SELECT * FROM job WHERE status=?";
+	private static final String UPDATESTATUS_QUERY = "UPDATE job SET status = ?, updated_at = NOW() WHERE id = ?";
 
 	public JobManager(Vertx vertx) {
 		dbService = DatabaseService.createProxy(vertx, Constants.DATABASE_SERVICE);
@@ -26,31 +33,26 @@ public class JobManager {
 	public void add(JsonObject dataAssetDescriptionJson, Handler<AsyncResult<JsonObject>> resultHandler) {
 		DataAssetDescription dataAssetDescription = Json.decodeValue(dataAssetDescriptionJson.toString(), DataAssetDescription.class);
 
-		String update = "INSERT INTO job (created_at,updated_at,data,status,sourceid, sourcetype) values ( ?, ?, ?, ?, ?, ?)";
-		Date d = new Date();
 		JsonArray params = new JsonArray()
-				.add(d.toInstant())
-				.add(d.toInstant())
 				.add(new JsonObject((dataAssetDescription.getData().isEmpty() ? new HashMap<>() : dataAssetDescription.getData())).toString())
 				.add(JobStatus.CREATED.ordinal())
 				.add(dataAssetDescription.getSourceId())
 				.add(dataAssetDescription.getDatasourcetype());
 
-		dbService.update(update, params, reply -> {
+		dbService.update(ADD_QUERY, params, reply -> {
 			if (reply.failed()) {
-				LOGGER.info(reply.cause());
+				LOGGER.error(reply.cause());
 				resultHandler.handle(Future.failedFuture(reply.cause().toString()));
 			} else {
 				resultHandler.handle(Future.succeededFuture());
 			}
 		});
-
 	}
 
 	public void findAll(Handler<AsyncResult<JsonArray>> resultHandler) {
-		dbService.query("SELECT * FROM job", new JsonArray(), reply -> {
+		dbService.query(FINDALL_QUERY, new JsonArray(), reply -> {
 			if (reply.failed()) {
-				LOGGER.info(reply.cause());
+				LOGGER.error(reply.cause());
 				resultHandler.handle(Future.failedFuture(reply.cause().toString()));
 			} else {
 				resultHandler.handle(Future.succeededFuture(new JsonArray(reply.result())));
@@ -59,9 +61,9 @@ public class JobManager {
 	}
 
 	public void deleteAll(Handler<AsyncResult<Void>> resultHandler) {
-		dbService.update("DELETE FROM job", new JsonArray(), reply -> {
+		dbService.update(DELETEALL_QUERY, new JsonArray(), reply -> {
 			if (reply.failed()) {
-				LOGGER.info(reply.cause());
+				LOGGER.error(reply.cause());
 				resultHandler.handle(Future.failedFuture(reply.cause().toString()));
 			} else {
 				resultHandler.handle(Future.succeededFuture());
@@ -70,9 +72,9 @@ public class JobManager {
 	}
 
 	public void findUnfinished(Handler<AsyncResult<JsonObject>> resultHandler) {
-		dbService.query("SELECT * FROM job WHERE status=?", new JsonArray().add(0), reply -> {
+		dbService.query(FINDUNFINISHED_QUERY, new JsonArray().add(0), reply -> {
 			if (reply.failed()) {
-				LOGGER.info(reply.cause());
+				LOGGER.error(reply.cause());
 				resultHandler.handle(Future.failedFuture(reply.cause().toString()));
 			} else {
 				resultHandler.handle(Future.succeededFuture(reply.result().get(0)));
@@ -81,10 +83,9 @@ public class JobManager {
 	}
 
 	public void updateStatus(Long id, JobStatus status, Handler<AsyncResult<Void>> resultHandler) {
-		Date d = new Date();
-		dbService.query("UPDATE job SET status = ?, updated_at = ? WHERE id = ?", new JsonArray().add(status.ordinal()).add(d.toInstant()).add(id), reply -> {
+		dbService.query(UPDATESTATUS_QUERY, new JsonArray().add(status.ordinal()).add(id), reply -> {
 			if (reply.failed()) {
-				LOGGER.info(reply.cause());
+				LOGGER.error(reply.cause());
 				resultHandler.handle(Future.failedFuture(reply.cause().toString()));
 			} else {
 				resultHandler.handle(Future.succeededFuture());

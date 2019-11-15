@@ -15,7 +15,9 @@ import io.vertx.core.json.Json;
 import io.vertx.core.json.JsonObject;
 import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
-
+/**
+ * @author Vincent Bohlen, vincent.bohlen@fokus.fraunhofer.de
+ */
 public class JobService extends AbstractVerticle {
 
 	private final Logger LOGGER = LoggerFactory.getLogger(JobService.class.getName());
@@ -30,7 +32,6 @@ public class JobService extends AbstractVerticle {
 		this.dataAssetManager = new DataAssetManager(vertx);
 		this.dataSourceManager = new DataSourceManager(vertx);
 		this.dataSourceAdapterService = DataSourceAdapterService.createProxy(vertx, Constants.DATASOURCEADAPTER_SERVICE);
-
 	}
 
 	public void process(Handler<AsyncResult<Void>> resultHandler) {
@@ -42,42 +43,41 @@ public class JobService extends AbstractVerticle {
 	private void initiateDataAssetCreation(Handler<AsyncResult<DataAsset>> next, AsyncResult<Job> result) {
 		if (result.succeeded()) {
 
-			dataAssetManager.addInitial(reply -> {
-				if(reply.succeeded()){
+			dataAssetManager.addInitial(initCreateReply -> {
+				if(initCreateReply.succeeded()){
 					Job job = result.result();
 					LOGGER.info("Started Job with ID: " + job.getId());
 
-					getDataSource(Long.parseLong(job.getSourceID()), reply4 -> {
-						if (reply4.succeeded()) {
-							jobManager.updateStatus(job.getId(), JobStatus.RUNNING, reply2 -> {});
+					getDataSource(Long.parseLong(job.getSourceID()), dataSourceReply -> {
+						if (dataSourceReply.succeeded()) {
+							jobManager.updateStatus(job.getId(), JobStatus.RUNNING, statusUpdateReply -> {});
 
 							DataAssetCreateMessage mes = new DataAssetCreateMessage();
 							mes.setJob(job);
-							mes.setDataSource(reply4.result());
-							mes.setDataAssetId(reply.result());
-							dataSourceAdapterService.createDataAsset(reply4.result().getDatasourceType(), new JsonObject(Json.encode(mes)), reply5-> {
-								if (reply5.succeeded()) {
-									next.handle(Future.succeededFuture(Json.decodeValue(reply5.result().toString(), DataAsset.class)));
+							mes.setDataSource(dataSourceReply.result());
+							mes.setDataAssetId(initCreateReply.result());
+							dataSourceAdapterService.createDataAsset(dataSourceReply.result().getDatasourceType(), new JsonObject(Json.encode(mes)), dataAssetCreateReply-> {
+								if (dataAssetCreateReply.succeeded()) {
+									next.handle(Future.succeededFuture(Json.decodeValue(dataAssetCreateReply.result().toString(), DataAsset.class)));
 								} else {
-									LOGGER.info(reply5.cause());
-									next.handle(Future.failedFuture(reply5.cause()));
+									LOGGER.error(dataAssetCreateReply.cause());
+									next.handle(Future.failedFuture(dataAssetCreateReply.cause()));
 								}
 							});
 						} else {
-							LOGGER.info(reply4.cause());
-							next.handle(Future.failedFuture(reply4.cause()));
+							LOGGER.error(dataSourceReply.cause());
+							next.handle(Future.failedFuture(dataSourceReply.cause()));
 						}
 					});
 				}
 				else{
-					LOGGER.info(reply.cause());
-					next.handle(Future.failedFuture(reply.cause()));
+					LOGGER.error(initCreateReply.cause());
+					next.handle(Future.failedFuture(initCreateReply.cause()));
 				}
 			});
-
 		}
 		else{
-			LOGGER.info("Job could not be found\n\n"+result.cause());
+			LOGGER.error("Job could not be found",result.cause());
 			next.handle(Future.failedFuture(result.cause()));
 		}
 	}
@@ -92,13 +92,13 @@ public class JobService extends AbstractVerticle {
 					jobManager.updateStatus(job.result().getId(), JobStatus.FINISHED, reply2 -> {});
 					resultHandler.handle(Future.succeededFuture());
 				} else {
-					LOGGER.error("DataAsset insertion failed.\n\n" + res.cause());
+					LOGGER.error("DataAsset insertion failed.", res.cause());
 					jobManager.updateStatus(job.result().getId(), JobStatus.ERROR, reply2 -> {});
 					resultHandler.handle(Future.failedFuture(reply.cause()));
 				}
 			});
 		} else {
-			LOGGER.error("DataAsset Creation failed.\n\n" + res.cause());
+			LOGGER.error("DataAsset Creation failed.", res.cause());
 			jobManager.updateStatus(job.result().getId(), JobStatus.ERROR, reply2 -> {});
 			resultHandler.handle(Future.failedFuture(res.cause()));
 		}
@@ -117,7 +117,7 @@ public class JobService extends AbstractVerticle {
 				next.handle(Future.succeededFuture(Json.decodeValue(reply.result().toString(), DataSource.class)));
 			}
 			else{
-				LOGGER.error("Id could not be found.\n\n"+reply.cause());
+				LOGGER.error("Id could not be found.", reply.cause());
 				next.handle(Future.failedFuture(reply.cause()));
 			}
 		});
@@ -130,7 +130,7 @@ public class JobService extends AbstractVerticle {
 			if (reply.succeeded()) {
 				next.handle(Future.succeededFuture(Json.decodeValue(reply.result().toString(), Job.class)));
 			} else {
-				LOGGER.info("Job could not be found.\n\n" + reply.cause());
+				LOGGER.error("Job could not be found.", reply.cause());
 				next.handle(Future.failedFuture(reply.cause().toString()));
 			}
 		});

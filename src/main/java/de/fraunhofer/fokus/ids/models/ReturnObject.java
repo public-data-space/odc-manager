@@ -1,25 +1,30 @@
 package de.fraunhofer.fokus.ids.models;
-
+/**
+ * @author Vincent Bohlen, vincent.bohlen@fokus.fraunhofer.de
+ */
 public class ReturnObject {
 
 	private String entity;
-	private ContentTypeWrapper typeWrapper;
+	private String type;
 	
 	public ReturnObject() { }
 
-	public ReturnObject(String entity, ContentTypeWrapper typeWrapper) {
+	public ReturnObject(String entity, String type) {
+		this.type= type;
 		this.entity = entity;
-		this.typeWrapper = typeWrapper;
 	}
-	public ContentTypeWrapper getTypeWrapper() {
-		return typeWrapper;
+	public String getType() {
+		return type;
 	}
-	public void setTypeWrapper(ContentTypeWrapper typeWrapper) {
-		this.typeWrapper = typeWrapper;
+
+	public void setType(String type) {
+		this.type= type;
 	}
+
 	public String getEntity() {
 		return entity;
 	}
+
 	public void setEntity(String entity) {
 		this.entity = entity;
 	}

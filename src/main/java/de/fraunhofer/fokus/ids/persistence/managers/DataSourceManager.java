@@ -9,15 +9,23 @@ import io.vertx.core.json.JsonObject;
 import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
 
-import java.util.Date;
-
 import static de.fraunhofer.fokus.ids.persistence.util.Functions.checkNull;
-
+/**
+ * @author Vincent Bohlen, vincent.bohlen@fokus.fraunhofer.de
+ */
 public class DataSourceManager {
 
     private DatabaseService dbService;
     private Logger LOGGER = LoggerFactory.getLogger(DataSourceManager.class.getName());
 
+    private static final String UPDATE_QUERY = "UPDATE DataSource SET updated_at = NOW(), datasourcename = ?, data = ?, datasourcetype = ? WHERE id = ?";
+    private static final String ADD_QUERY = "INSERT INTO DataSource (created_at, updated_at, datasourcename, data, datasourcetype) values (NOW(), NOW(), ?, ?::JSON, ?)";
+    private static final String DELETE_QUERY = "DELETE FROM datasource WHERE id = ?";
+    private static final String FINDBYTYPE_QUERY = "SELECT * FROM DataSource WHERE datasourcetype = ?";
+    private static final String FINDBYID_QUERY = "SELECT * FROM DataSource WHERE id = ?";
+    private static final String FINDALL_QUERY ="SELECT * FROM DataSource ORDER BY id DESC";
+    private static final String FINDTYPEBYID_QUERY = "SELECT datasourcetype FROM DataSource WHERE id = ?";
+    private static final String FINDALLBYTYPE_QUERY = "SELECT * FROM DataSource ORDER BY datasourcetype";
 
     public DataSourceManager(Vertx vertx) {
         dbService = DatabaseService.createProxy(vertx, Constants.DATABASE_SERVICE);
@@ -25,19 +33,15 @@ public class DataSourceManager {
 
     public void update(DataSource dataSource, Handler<AsyncResult<Void>> resultHandler) {
 
-        String update = "UPDATE  DataSource SET  updated_at = ?, datasourcename = ?, data = ?, datasourcetype = ?" +
-                "WHERE id = ?";
-        Date d = new Date();
         JsonArray params = new JsonArray()
-                .add(d.toInstant())
                 .add(checkNull(dataSource.getDatasourceName()))
                 .add(dataSource.getData())
                 .add(dataSource.getDatasourceType())
                 .add(dataSource.getId());
 
-        dbService.update(update, params, reply -> {
+        dbService.update(UPDATE_QUERY, params, reply -> {
             if (reply.failed()) {
-                LOGGER.info(reply.cause());
+                LOGGER.error(reply.cause());
                 resultHandler.handle(Future.failedFuture(reply.cause().toString()));
             } else {
                 resultHandler.handle(Future.succeededFuture());
@@ -48,19 +52,14 @@ public class DataSourceManager {
 
     public void add(DataSource dataSource, Handler<AsyncResult<Void>> resultHandler) {
 
-        String update = "INSERT INTO DataSource (created_at, updated_at, datasourcename, data, datasourcetype) " +
-                "values (?, ?, ?, ?::JSON, ?)";
-        Date d = new Date();
         JsonArray params = new JsonArray()
-                .add(d.toInstant())
-                .add(d.toInstant())
                 .add(checkNull(dataSource.getDatasourceName()))
                 .add(dataSource.getData().toString())
                 .add(dataSource.getDatasourceType());
 
-        dbService.update(update, params, reply -> {
+        dbService.update(ADD_QUERY, params, reply -> {
             if (reply.failed()) {
-                LOGGER.info(reply.cause());
+                LOGGER.error(reply.cause());
                 resultHandler.handle(Future.failedFuture(reply.cause().toString()));
             } else {
                 resultHandler.handle(Future.succeededFuture());
@@ -69,9 +68,9 @@ public class DataSourceManager {
     }
 
     public void delete(Long id, Handler<AsyncResult<Void>> resultHandler) {
-        dbService.update("DELETE FROM datasource WHERE id= ?",new JsonArray().add(id), reply -> {
+        dbService.update(DELETE_QUERY,new JsonArray().add(id), reply -> {
             if (reply.failed()) {
-                LOGGER.info(reply.cause());
+                LOGGER.error(reply.cause());
                 resultHandler.handle(Future.failedFuture(reply.cause().toString()));
             } else {
                 resultHandler.handle(Future.succeededFuture());
@@ -80,9 +79,9 @@ public class DataSourceManager {
     }
 
     public void findByType(String type, Handler<AsyncResult<JsonArray>> resultHandler) {
-        dbService.query("SELECT * FROM DataSource WHERE datasourcetype=?",new JsonArray().add(type), reply -> {
+        dbService.query(FINDBYTYPE_QUERY,new JsonArray().add(type), reply -> {
             if (reply.failed()) {
-                LOGGER.info(reply.cause());
+                LOGGER.error(reply.cause());
                 resultHandler.handle(Future.failedFuture(reply.cause().toString()));
             } else {
                 resultHandler.handle(Future.succeededFuture(new JsonArray(reply.result())));
@@ -91,9 +90,9 @@ public class DataSourceManager {
     }
 
     public void findById(Long id, Handler<AsyncResult<JsonObject>> resultHandler) {
-        dbService.query("SELECT * FROM DataSource WHERE id=?",new JsonArray().add(id), reply -> {
+        dbService.query(FINDBYID_QUERY,new JsonArray().add(id), reply -> {
             if (reply.failed()) {
-                LOGGER.info(reply.cause());
+                LOGGER.error(reply.cause());
                 resultHandler.handle(Future.failedFuture(reply.cause().toString()));
             } else {
                 resultHandler.handle(Future.succeededFuture(reply.result().get(0)));
@@ -102,9 +101,9 @@ public class DataSourceManager {
     }
 
     public void findAll(Handler<AsyncResult<JsonArray>> resultHandler) {
-        dbService.query("SELECT * FROM DataSource ORDER BY id DESC" ,new JsonArray(), reply -> {
+        dbService.query(FINDALL_QUERY ,new JsonArray(), reply -> {
             if (reply.failed()) {
-                LOGGER.info(reply.cause());
+                LOGGER.error(reply.cause());
                 resultHandler.handle(Future.failedFuture(reply.cause().toString()));
             } else {
                 resultHandler.handle(Future.succeededFuture(new JsonArray(reply.result())));
@@ -113,9 +112,9 @@ public class DataSourceManager {
     }
 
     public void findTypeById(Long id, Handler<AsyncResult<Long>> resultHandler) {
-        dbService.query("SELECT datasourcetype FROM DataSource WHERE id = ?", new JsonArray().add(id), reply -> {
+        dbService.query(FINDTYPEBYID_QUERY, new JsonArray().add(id), reply -> {
             if (reply.failed()) {
-                LOGGER.info(reply.cause());
+                LOGGER.error(reply.cause());
                 resultHandler.handle(Future.failedFuture(reply.cause().toString()));
             } else {
                 resultHandler.handle(Future.succeededFuture(reply.result().get(0).getLong("datasourcetype")));
@@ -124,9 +123,9 @@ public class DataSourceManager {
     }
 
     public void findAllByType(Handler<AsyncResult<JsonObject>> resultHandler) {
-        dbService.query( "SELECT * FROM DataSource ORDER BY datasourcetype" ,new JsonArray(), reply -> {
+        dbService.query( FINDALLBYTYPE_QUERY ,new JsonArray(), reply -> {
             if (reply.failed()) {
-                LOGGER.info(reply.cause());
+                LOGGER.error(reply.cause());
                 resultHandler.handle(Future.failedFuture(reply.cause().toString()));
             } else {
 
