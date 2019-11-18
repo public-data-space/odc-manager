@@ -82,7 +82,7 @@ public class DataSourceAdapterServiceImpl implements DataSourceAdapterService {
 
     @Override
     public DataSourceAdapterService delete(String dataSourceType, Long id, Handler<AsyncResult<JsonObject>> resultHandler) {
-        get(gatewayPort, gatewayHost, "/supported/"+dataSourceType+"/"+id, reply -> {
+        get(gatewayPort, gatewayHost, "/delete/"+dataSourceType+"/"+id, reply -> {
             if (reply.succeeded()) {
                 resultHandler.handle(Future.succeededFuture(reply.result()));
             } else {

@@ -1,10 +1,14 @@
 package de.fraunhofer.fokus.ids.controllers;
 
+import de.fraunhofer.fokus.ids.models.Constants;
 import de.fraunhofer.fokus.ids.models.DataAssetDescription;
+import de.fraunhofer.fokus.ids.persistence.entities.DataAsset;
 import de.fraunhofer.fokus.ids.persistence.enums.DataAssetStatus;
 import de.fraunhofer.fokus.ids.persistence.managers.DataAssetManager;
+import de.fraunhofer.fokus.ids.persistence.managers.DataSourceManager;
 import de.fraunhofer.fokus.ids.persistence.managers.JobManager;
 import de.fraunhofer.fokus.ids.services.JobService;
+import de.fraunhofer.fokus.ids.services.datasourceAdapter.DataSourceAdapterService;
 import io.vertx.core.*;
 import io.vertx.core.eventbus.Message;
 import io.vertx.core.json.Json;
@@ -19,6 +23,8 @@ public class DataAssetController {
 
 	private Logger LOGGER = LoggerFactory.getLogger(DataAssetController.class.getName());
 	private DataAssetManager dataAssetManager;
+	private DataSourceAdapterService dataSourceAdapterService;
+	private DataSourceManager dataSourceManager;
 	private JobManager jobManager;
 	private JobService jobService;
 
@@ -26,6 +32,8 @@ public class DataAssetController {
 		dataAssetManager = new DataAssetManager(vertx);
 		jobManager = new JobManager(vertx);
 		jobService = new JobService(vertx);
+		this.dataSourceManager = new DataSourceManager(vertx);
+		dataSourceAdapterService = DataSourceAdapterService.createProxy(vertx, Constants.DATASOURCEADAPTER_SERVICE);
 	}
 
 	public void counts(Handler<AsyncResult<JsonObject>> resultHandler) {
@@ -124,16 +132,34 @@ public class DataAssetController {
 	}
 
 	public void delete(Long id, Handler<AsyncResult<JsonObject>> resultHandler) {
-		//TODO DELETE ADD ADAPTER
-		dataAssetManager.delete(id, reply -> {
-			if (reply.succeeded()) {
-				JsonObject jO = new JsonObject();
-				jO.put("status", "success");
-				jO.put("text", "Data Asset " + id + " wurde gelöscht.");
-				resultHandler.handle(Future.succeededFuture(jO));
+		dataAssetManager.findById(id, dataAssetReply -> {
+			if(dataAssetReply.succeeded()){
+				dataSourceManager.findById(Json.decodeValue(dataAssetReply.result().toString(), DataAsset.class).getSourceID(), reply2 -> {
+					if(reply2.succeeded()){
+						Future serviceDeleteFuture = Future.future();
+						dataSourceAdapterService.delete(reply2.result().getString("datasourcetype"), id, serviceDeleteFuture.completer());
+
+						Future databaseDeleteFuture = Future.future();
+						dataAssetManager.delete(id, databaseDeleteFuture.completer());
+
+						CompositeFuture.all(databaseDeleteFuture, serviceDeleteFuture).setHandler( ar -> {
+							if(ar.succeeded()){
+								JsonObject jO = new JsonObject();
+								jO.put("status", "success");
+								jO.put("text", "Data Asset " + id + " wurde gelöscht.");
+								resultHandler.handle(Future.succeededFuture(jO));
+							} else {
+								LOGGER.error("Delete Future could not be completed.", ar.cause());
+								resultHandler.handle(Future.failedFuture(ar.cause()));
+							}
+						});
+
+					} else {
+						resultHandler.handle(Future.failedFuture(reply2.cause()));
+					}
+				});
 			} else {
-				LOGGER.error("Delete Future could not be completed.\n\n" + reply.cause());
-				resultHandler.handle(Future.failedFuture(reply.cause()));
+				resultHandler.handle(Future.failedFuture(dataAssetReply.cause()));
 			}
 		});
 	}
