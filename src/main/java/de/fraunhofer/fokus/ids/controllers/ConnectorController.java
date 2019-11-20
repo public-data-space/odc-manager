@@ -131,10 +131,11 @@ public class ConnectorController {
 
 						dataSourceAdapterService.getFile(dataSource.getDatasourceType(), new JsonObject(Json.encode(request)), reply3 -> {
 							if(reply3.succeeded()){
+								FileResponse fileResponse = Json.decodeValue(reply3.result().toString(), FileResponse.class);
 								if(fileType.equals(FileType.JSON)) {
-									getJSON(reply3.result().getValue("result").toString(), resultHandler);
+									getJSON(fileResponse.getBody(), resultHandler);
 								} else {
-									getMultiPart(reply3.result().getValue("result").toString(), fileType, resultHandler);
+									getMultiPart(fileResponse.getBody(), fileType, resultHandler);
 								}
 							}
 							else{
