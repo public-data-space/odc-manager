@@ -27,6 +27,7 @@ public class DataAssetController {
 	private DataSourceManager dataSourceManager;
 	private JobManager jobManager;
 	private JobService jobService;
+	private BrokerController brokerController;
 
 	public DataAssetController(Vertx vertx) {
 		dataAssetManager = new DataAssetManager(vertx);
@@ -34,6 +35,7 @@ public class DataAssetController {
 		jobService = new JobService(vertx);
 		this.dataSourceManager = new DataSourceManager(vertx);
 		dataSourceAdapterService = DataSourceAdapterService.createProxy(vertx, Constants.DATASOURCEADAPTER_SERVICE);
+		brokerController = new BrokerController(vertx);
 	}
 
 	public void counts(Handler<AsyncResult<JsonObject>> resultHandler) {
@@ -106,6 +108,7 @@ public class DataAssetController {
 			if (reply.succeeded()) {
 				jO.put("success", "Data Asset " + id + " wurde veröffentlicht.");
 				resultHandler.handle(Future.succeededFuture(jO));
+				brokerController.update();
 			}
 			else {
 				LOGGER.error(reply.cause());
@@ -120,7 +123,7 @@ public class DataAssetController {
 			if (reply.succeeded()) {
 				jO.put("success", "Data Asset " + id + " wurde zurückgehalten.");
 				resultHandler.handle(Future.succeededFuture(jO));
-
+				brokerController.update();
 			}
 			else {
 				LOGGER.error(reply.cause());
@@ -148,6 +151,7 @@ public class DataAssetController {
 								jO.put("status", "success");
 								jO.put("text", "Data Asset " + id + " wurde gelöscht.");
 								resultHandler.handle(Future.succeededFuture(jO));
+								brokerController.update();
 							} else {
 								LOGGER.error("Delete Future could not be completed.", ar.cause());
 								resultHandler.handle(Future.failedFuture(ar.cause()));

@@ -151,14 +151,12 @@ public class BrokerController {
         });
     }
 
-    public void update(Handler<AsyncResult<Void>> resultHandler){
+    public void update(){
         brokerService.update( reply -> {
             if (reply.succeeded()) {
                 LOGGER.info("Updating of new connector information at brokers successful.");
-                resultHandler.handle(Future.succeededFuture());
             } else {
                 LOGGER.error(reply.cause());
-                resultHandler.handle(Future.failedFuture(reply.cause()));
             }
         });
     }
