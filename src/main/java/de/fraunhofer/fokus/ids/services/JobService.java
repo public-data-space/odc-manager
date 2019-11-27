@@ -58,7 +58,20 @@ public class JobService extends AbstractVerticle {
 							mes.setDataAssetId(initCreateReply.result());
 							dataSourceAdapterService.createDataAsset(dataSourceReply.result().getDatasourceType(), new JsonObject(Json.encode(mes)), dataAssetCreateReply-> {
 								if (dataAssetCreateReply.succeeded()) {
-									next.handle(Future.succeededFuture(Json.decodeValue(dataAssetCreateReply.result().toString(), DataAsset.class)));
+									if (dataAssetCreateReply.result()==null){
+										dataAssetManager.delete(initCreateReply.result(), deleteReply -> {
+											if(deleteReply.succeeded()){
+												LOGGER.error(dataAssetCreateReply.cause());
+												next.handle(Future.failedFuture(dataAssetCreateReply.cause()));										}
+											else{
+												LOGGER.info("INCONSISTENCY IN DATABASE.");
+												next.handle(Future.failedFuture(deleteReply.cause()));
+											}
+										});
+									}
+									else {
+										next.handle(Future.succeededFuture(Json.decodeValue(dataAssetCreateReply.result().toString(), DataAsset.class)));
+									}
 								} else {
 									LOGGER.error(dataAssetCreateReply.cause());
 									next.handle(Future.failedFuture(dataAssetCreateReply.cause()));
