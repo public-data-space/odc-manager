@@ -24,133 +24,132 @@ import io.vertx.core.logging.LoggerFactory;
  */
 public class DataAssetController {
 
-	private Logger LOGGER = LoggerFactory.getLogger(DataAssetController.class.getName());
-	private DataAssetManager dataAssetManager;
-	private DataSourceAdapterService dataSourceAdapterService;
-	private DataSourceManager dataSourceManager;
-	private JobManager jobManager;
-	private BrokerController brokerController;
+    private Logger LOGGER = LoggerFactory.getLogger(DataAssetController.class.getName());
+    private DataAssetManager dataAssetManager;
+    private DataSourceAdapterService dataSourceAdapterService;
+    private DataSourceManager dataSourceManager;
+    private JobManager jobManager;
+    private BrokerController brokerController;
 
-	public DataAssetController(Vertx vertx) {
-		dataAssetManager = new DataAssetManager(vertx);
-		jobManager = new JobManager(vertx);
-		this.dataSourceManager = new DataSourceManager(vertx);
-		dataSourceAdapterService = DataSourceAdapterService.createProxy(vertx, Constants.DATASOURCEADAPTER_SERVICE);
-		brokerController = new BrokerController(vertx);
-	}
+    public DataAssetController(Vertx vertx) {
+        dataAssetManager = new DataAssetManager(vertx);
+        jobManager = new JobManager(vertx);
+        this.dataSourceManager = new DataSourceManager(vertx);
+        dataSourceAdapterService = DataSourceAdapterService.createProxy(vertx, Constants.DATASOURCEADAPTER_SERVICE);
+        brokerController = new BrokerController(vertx);
+    }
 
-	public void counts(Handler<AsyncResult<JsonObject>> resultHandler) {
+    public void counts(Handler<AsyncResult<JsonObject>> resultHandler) {
 
-		Future<Long> count = Future.future();
-		dataAssetManager.count( reply -> {
-			if (reply.succeeded()) {
-				count.complete(reply.result());
-			}
-			else {
-				LOGGER.error("Count could not be queried.\n\n"+reply.cause());
-				count.fail(reply.cause());
-			}
-		});
+        Future<Long> count = Future.future();
+        dataAssetManager.count(reply -> {
+            if (reply.succeeded()) {
+                count.complete(reply.result());
+            } else {
+                LOGGER.error("Count could not be queried.\n\n" + reply.cause());
+                count.fail(reply.cause());
+            }
+        });
 
-		Future<Long> countPublished = Future.future();
-		dataAssetManager.countPublished(reply -> {
-			if (reply.succeeded()) {
-				countPublished.complete(reply.result());
-			}
-			else {
-				LOGGER.error("Published count could not be queried.\n\n"+reply.cause());
-				countPublished.fail(reply.cause());
-			}
-		});
+        Future<Long> countPublished = Future.future();
+        dataAssetManager.countPublished(reply -> {
+            if (reply.succeeded()) {
+                countPublished.complete(reply.result());
+            } else {
+                LOGGER.error("Published count could not be queried.\n\n" + reply.cause());
+                countPublished.fail(reply.cause());
+            }
+        });
 
-		CompositeFuture.all(count, countPublished).setHandler(ar -> {
-			if(ar.succeeded()) {
-				JsonObject jO = new JsonObject();
-				jO.put("dacount", count.result());
-				jO.put("publishedcount", countPublished.result());
-				resultHandler.handle(Future.succeededFuture(jO));
-			}
-			else {
-				LOGGER.error("Composite Future failed.\n\n"+ar.cause());
-				resultHandler.handle(Future.failedFuture(ar.cause()));
-			}
-		});
-	}
+        CompositeFuture.all(count, countPublished).setHandler(ar -> {
+            if (ar.succeeded()) {
+                JsonObject jO = new JsonObject();
+                jO.put("dacount", count.result());
+                jO.put("publishedcount", countPublished.result());
+                resultHandler.handle(Future.succeededFuture(jO));
+            } else {
+                LOGGER.error("Composite Future failed.\n\n" + ar.cause());
+                resultHandler.handle(Future.failedFuture(ar.cause()));
+            }
+        });
+    }
 
-	public void add(DataAssetDescription dataAssetDescription, Handler<AsyncResult<JsonObject>> resultHandler) {
+    public void add(DataAssetDescription dataAssetDescription, Handler<AsyncResult<JsonObject>> resultHandler) {
 
-		if (dataAssetDescription.getData().isEmpty()) {
-			JsonObject jO = new JsonObject();
-			jO.put("status", "error");
-			jO.put("text", "Bitte geben Sie eine Resource-ID ein!");
-			resultHandler.handle(Future.succeededFuture(jO));
-		} else {
-			jobManager.add(new JsonObject(Json.encode(dataAssetDescription)), jobReply -> {
-				if (jobReply.succeeded()) {
-					long jobId = jobReply.result().getLong("id");
-					LOGGER.info("Starting Job with ID: " + jobId);
-					jobManager.updateStatus(jobId, JobStatus.RUNNING, statusUpdateReply -> {});
-					initiateDataAssetCreation(da -> createDataAsset(jobId, da), dataAssetDescription);
-					JsonObject jO = new JsonObject();
-					jO.put("status", "success");
-					jO.put("text", "Job wurde erstellt!");
-					resultHandler.handle(Future.succeededFuture(jO));
-				} else {
-					LOGGER.error("Der Job konnte nicht erstellt werden!", jobReply.cause());
-					JsonObject jO = new JsonObject();
-					jO.put("status", "error");
-					jO.put("text", "Der Job konnte nicht erstellt werden!");
-					resultHandler.handle(Future.succeededFuture(jO));
-				}
-			});
-		}
-	}
+        if (dataAssetDescription.getData().isEmpty()) {
+            JsonObject jO = new JsonObject();
+            jO.put("status", "error");
+            jO.put("text", "Bitte geben Sie eine Resource-ID ein!");
+            resultHandler.handle(Future.succeededFuture(jO));
+        } else {
+            jobManager.add(new JsonObject(Json.encode(dataAssetDescription)), jobReply -> {
+                if (jobReply.succeeded()) {
+                    long jobId = jobReply.result().getLong("id");
+                    LOGGER.info("Starting Job with ID: " + jobId);
+                    jobManager.updateStatus(jobId, JobStatus.RUNNING, statusUpdateReply -> {
+                    });
+                    initiateDataAssetCreation(da -> createDataAsset(jobId, da), dataAssetDescription);
+                    JsonObject jO = new JsonObject();
+                    jO.put("status", "success");
+                    jO.put("text", "Job wurde erstellt!");
+                    resultHandler.handle(Future.succeededFuture(jO));
+                } else {
+                    LOGGER.error("Der Job konnte nicht erstellt werden!", jobReply.cause());
+                    JsonObject jO = new JsonObject();
+                    jO.put("status", "error");
+                    jO.put("text", "Der Job konnte nicht erstellt werden!");
+                    resultHandler.handle(Future.succeededFuture(jO));
+                }
+            });
+        }
+    }
 
-	private void initiateDataAssetCreation(Handler<AsyncResult<DataAsset>> next, DataAssetDescription dataAssetDescription) {
-			dataAssetManager.addInitial(initCreateReply -> {
-				if(initCreateReply.succeeded()){
-					dataSourceManager.findById(Integer.toUnsignedLong(dataAssetDescription.getSourceId()), dataSourceReply -> {
-						if (dataSourceReply.succeeded()) {
-							DataSource dataSource = Json.decodeValue(dataSourceReply.result().toString(), DataSource.class);
+    private void initiateDataAssetCreation(Handler<AsyncResult<DataAsset>> next, DataAssetDescription dataAssetDescription) {
+        dataAssetManager.addInitial(initCreateReply -> {
+            if (initCreateReply.succeeded()) {
+                dataSourceManager.findById(Integer.toUnsignedLong(dataAssetDescription.getSourceId()), dataSourceReply -> {
+                    if (dataSourceReply.succeeded()) {
+                        DataSource dataSource = Json.decodeValue(dataSourceReply.result().toString(), DataSource.class);
 
-							DataAssetCreateMessage mes = new DataAssetCreateMessage();
-							mes.setData(new JsonObject(dataAssetDescription.getData()));
-							mes.setDataSource(dataSource);
-							mes.setDataAssetId(initCreateReply.result());
+                        DataAssetCreateMessage mes = new DataAssetCreateMessage();
+                        mes.setData(new JsonObject(dataAssetDescription.getData()));
+                        mes.setDataSource(dataSource);
+                        mes.setDataAssetId(initCreateReply.result());
 
-							dataSourceAdapterService.createDataAsset(dataSource.getDatasourceType(), new JsonObject(Json.encode(mes)), dataAssetCreateReply-> {
-								if (dataAssetCreateReply.succeeded()) {
-									if (dataAssetCreateReply.result()==null){
-										dataAssetManager.delete(initCreateReply.result(), deleteReply -> {
-											if(deleteReply.succeeded()){
-												LOGGER.error(dataAssetCreateReply.cause());
-												next.handle(Future.failedFuture(dataAssetCreateReply.cause()));
-											} else{
-												LOGGER.info("INCONSISTENCY IN DATABASE. There is a DataAsset object in the database with no corresponding object in the adapter.");
-												next.handle(Future.failedFuture(deleteReply.cause()));
-											}
-										});
-									}
-									else {
-										next.handle(Future.succeededFuture(Json.decodeValue(dataAssetCreateReply.result().toString(), DataAsset.class)));
-									}
-								} else {
-									LOGGER.error(dataAssetCreateReply.cause());
-									next.handle(Future.failedFuture(dataAssetCreateReply.cause()));
-								}
-							});
-						} else {
-							LOGGER.error(dataSourceReply.cause());
-							next.handle(Future.failedFuture(dataSourceReply.cause()));
-						}
-					});
-				}
-				else{
-					LOGGER.error(initCreateReply.cause());
-					next.handle(Future.failedFuture(initCreateReply.cause()));
-				}
-			});
-		}
+                        dataSourceAdapterService.createDataAsset(dataSource.getDatasourceType(), new JsonObject(Json.encode(mes)), dataAssetCreateReply -> {
+                            if (dataAssetCreateReply.succeeded()) {
+                                if (dataAssetCreateReply.result() == null) {
+                                    cleanUpDataAssetDummy(next, initCreateReply.result(), dataAssetCreateReply.cause());
+                                } else {
+                                    next.handle(Future.succeededFuture(Json.decodeValue(dataAssetCreateReply.result().toString(), DataAsset.class)));
+                                }
+                            } else {
+                                cleanUpDataAssetDummy(next, initCreateReply.result(), dataAssetCreateReply.cause());
+                            }
+                        });
+                    } else {
+                        LOGGER.error(dataSourceReply.cause());
+                        next.handle(Future.failedFuture(dataSourceReply.cause()));
+                    }
+                });
+            } else {
+                LOGGER.error(initCreateReply.cause());
+                next.handle(Future.failedFuture(initCreateReply.cause()));
+            }
+        });
+    }
+
+    private void cleanUpDataAssetDummy(Handler<AsyncResult<DataAsset>> next, long dataAssetId, Throwable cause){
+        dataAssetManager.delete(dataAssetId, deleteReply -> {
+            if(deleteReply.succeeded()){
+                LOGGER.error(cause);
+                next.handle(Future.failedFuture(cause));
+            } else{
+                LOGGER.info("INCONSISTENCY IN DATABASE. There is a DataAsset object in the database with no corresponding object in the adapter.");
+                next.handle(Future.failedFuture(deleteReply.cause()));
+            }
+        });
+    }
 
 	private void createDataAsset(long jobId, AsyncResult<DataAsset> res) {
 		if (res.succeeded()) {
