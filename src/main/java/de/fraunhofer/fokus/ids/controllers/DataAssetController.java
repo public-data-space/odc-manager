@@ -209,10 +209,10 @@ public class DataAssetController {
 			if(dataAssetReply.succeeded()){
 				dataSourceManager.findById(Json.decodeValue(dataAssetReply.result().toString(), DataAsset.class).getSourceID(), reply2 -> {
 					if(reply2.succeeded()){
-						Future serviceDeleteFuture = Future.future();
+						Future<JsonObject> serviceDeleteFuture = Future.future();
 						dataSourceAdapterService.delete(reply2.result().getString("datasourcetype"), id, serviceDeleteFuture.completer());
 
-						Future databaseDeleteFuture = Future.future();
+						Future<Void> databaseDeleteFuture = Future.future();
 						dataAssetManager.delete(id, databaseDeleteFuture.completer());
 
 						CompositeFuture.all(databaseDeleteFuture, serviceDeleteFuture).setHandler( ar -> {
