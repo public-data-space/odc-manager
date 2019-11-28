@@ -20,10 +20,9 @@ public class JobManager {
 	private DatabaseService dbService;
 	private Logger LOGGER = LoggerFactory.getLogger(JobManager.class.getName());
 
-	private static final String ADD_QUERY = "INSERT INTO job (created_at,updated_at,data,status,sourceid, sourcetype) values (NOW(), NOW(), ?, ?, ?, ?)";
+	private static final String ADD_QUERY = "INSERT INTO job (created_at,updated_at,data,status,sourceid, sourcetype) values (NOW(), NOW(), ?, ?, ?, ?) RETURNING id";
 	private static final String FINDALL_QUERY = "SELECT * FROM job";
 	private static final String DELETEALL_QUERY = "DELETE FROM job";
-	private static final String FINDUNFINISHED_QUERY = "SELECT * FROM job WHERE status=?";
 	private static final String UPDATESTATUS_QUERY = "UPDATE job SET status = ?, updated_at = NOW() WHERE id = ?";
 
 	public JobManager(Vertx vertx) {
@@ -39,12 +38,12 @@ public class JobManager {
 				.add(dataAssetDescription.getSourceId())
 				.add(dataAssetDescription.getDatasourcetype());
 
-		dbService.update(ADD_QUERY, params, reply -> {
+		dbService.query(ADD_QUERY, params, reply -> {
 			if (reply.failed()) {
 				LOGGER.error(reply.cause());
 				resultHandler.handle(Future.failedFuture(reply.cause().toString()));
 			} else {
-				resultHandler.handle(Future.succeededFuture());
+				resultHandler.handle(Future.succeededFuture(reply.result().get(0)));
 			}
 		});
 	}
@@ -67,17 +66,6 @@ public class JobManager {
 				resultHandler.handle(Future.failedFuture(reply.cause().toString()));
 			} else {
 				resultHandler.handle(Future.succeededFuture());
-			}
-		});
-	}
-
-	public void findUnfinished(Handler<AsyncResult<JsonObject>> resultHandler) {
-		dbService.query(FINDUNFINISHED_QUERY, new JsonArray().add(0), reply -> {
-			if (reply.failed()) {
-				LOGGER.error(reply.cause());
-				resultHandler.handle(Future.failedFuture(reply.cause().toString()));
-			} else {
-				resultHandler.handle(Future.succeededFuture(reply.result().get(0)));
 			}
 		});
 	}

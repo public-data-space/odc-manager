@@ -1,13 +1,16 @@
 package de.fraunhofer.fokus.ids.controllers;
 
+import de.fraunhofer.fokus.ids.messages.DataAssetCreateMessage;
 import de.fraunhofer.fokus.ids.models.Constants;
 import de.fraunhofer.fokus.ids.models.DataAssetDescription;
 import de.fraunhofer.fokus.ids.persistence.entities.DataAsset;
+import de.fraunhofer.fokus.ids.persistence.entities.DataSource;
+import de.fraunhofer.fokus.ids.persistence.entities.Job;
 import de.fraunhofer.fokus.ids.persistence.enums.DataAssetStatus;
+import de.fraunhofer.fokus.ids.persistence.enums.JobStatus;
 import de.fraunhofer.fokus.ids.persistence.managers.DataAssetManager;
 import de.fraunhofer.fokus.ids.persistence.managers.DataSourceManager;
 import de.fraunhofer.fokus.ids.persistence.managers.JobManager;
-import de.fraunhofer.fokus.ids.services.JobService;
 import de.fraunhofer.fokus.ids.services.datasourceAdapter.DataSourceAdapterService;
 import io.vertx.core.*;
 import io.vertx.core.eventbus.Message;
@@ -26,13 +29,11 @@ public class DataAssetController {
 	private DataSourceAdapterService dataSourceAdapterService;
 	private DataSourceManager dataSourceManager;
 	private JobManager jobManager;
-	private JobService jobService;
 	private BrokerController brokerController;
 
 	public DataAssetController(Vertx vertx) {
 		dataAssetManager = new DataAssetManager(vertx);
 		jobManager = new JobManager(vertx);
-		jobService = new JobService(vertx);
 		this.dataSourceManager = new DataSourceManager(vertx);
 		dataSourceAdapterService = DataSourceAdapterService.createProxy(vertx, Constants.DATASOURCEADAPTER_SERVICE);
 		brokerController = new BrokerController(vertx);
@@ -84,15 +85,18 @@ public class DataAssetController {
 			jO.put("text", "Bitte geben Sie eine Resource-ID ein!");
 			resultHandler.handle(Future.succeededFuture(jO));
 		} else {
-			jobManager.add(new JsonObject(Json.encode(dataAssetDescription)), job -> {
-				if (job.succeeded()) {
-					jobService.process(reply -> {});
+			jobManager.add(new JsonObject(Json.encode(dataAssetDescription)), jobReply -> {
+				if (jobReply.succeeded()) {
+					long jobId = jobReply.result().getLong("id");
+					LOGGER.info("Starting Job with ID: " + jobId);
+					jobManager.updateStatus(jobId, JobStatus.RUNNING, statusUpdateReply -> {});
+					initiateDataAssetCreation(da -> createDataAsset(jobId, da), dataAssetDescription);
 					JsonObject jO = new JsonObject();
 					jO.put("status", "success");
 					jO.put("text", "Job wurde erstellt!");
 					resultHandler.handle(Future.succeededFuture(jO));
 				} else {
-					LOGGER.error("Der Job konnte nicht erstellt werden!\n\n"+job.cause());
+					LOGGER.error("Der Job konnte nicht erstellt werden!", jobReply.cause());
 					JsonObject jO = new JsonObject();
 					jO.put("status", "error");
 					jO.put("text", "Der Job konnte nicht erstellt werden!");
@@ -101,6 +105,59 @@ public class DataAssetController {
 			});
 		}
 	}
+
+	private void initiateDataAssetCreation(Handler<AsyncResult<DataAsset>> next, DataAssetDescription dataAssetDescription) {
+			dataAssetManager.addInitial(initCreateReply -> {
+				if(initCreateReply.succeeded()){
+					dataSourceManager.findById(Integer.toUnsignedLong(dataAssetDescription.getSourceId()), dataSourceReply -> {
+						if (dataSourceReply.succeeded()) {
+							DataSource dataSource = Json.decodeValue(dataSourceReply.result().toString(), DataSource.class);
+
+							DataAssetCreateMessage mes = new DataAssetCreateMessage();
+							mes.setData(new JsonObject(dataAssetDescription.getData()));
+							mes.setDataSource(dataSource);
+							mes.setDataAssetId(initCreateReply.result());
+
+							dataSourceAdapterService.createDataAsset(dataSource.getDatasourceType(), new JsonObject(Json.encode(mes)), dataAssetCreateReply-> {
+								if (dataAssetCreateReply.succeeded()) {
+									next.handle(Future.succeededFuture(Json.decodeValue(dataAssetCreateReply.result().toString(), DataAsset.class)));
+								} else {
+									LOGGER.error(dataAssetCreateReply.cause());
+									next.handle(Future.failedFuture(dataAssetCreateReply.cause()));
+								}
+							});
+						} else {
+							LOGGER.error(dataSourceReply.cause());
+							next.handle(Future.failedFuture(dataSourceReply.cause()));
+						}
+					});
+				}
+				else{
+					LOGGER.error(initCreateReply.cause());
+					next.handle(Future.failedFuture(initCreateReply.cause()));
+				}
+			});
+		}
+
+	private void createDataAsset(long jobId, AsyncResult<DataAsset> res) {
+		if (res.succeeded()) {
+			LOGGER.info("DataAsset was successfully created.");
+
+			dataAssetManager.add(new JsonObject(Json.encode(res.result())), reply -> {
+				if (reply.succeeded()) {
+					LOGGER.info("DataAsset was successfully inserted to the DB.");
+					jobManager.updateStatus(jobId, JobStatus.FINISHED, reply2 -> {});
+				} else {
+					LOGGER.error("DataAsset insertion failed.", res.cause());
+					jobManager.updateStatus(jobId, JobStatus.ERROR, reply2 -> {});
+				}
+			});
+		} else {
+			LOGGER.error("DataAsset Creation failed.", res.cause());
+			jobManager.updateStatus(jobId, JobStatus.ERROR, reply2 -> {});
+		}
+	}
+
 
 	public void publish(Long id, Handler<AsyncResult<JsonObject>> resultHandler) {
 		dataAssetManager.changeStatus(DataAssetStatus.PUBLISHED, id, reply -> {
