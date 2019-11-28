@@ -120,7 +120,20 @@ public class DataAssetController {
 
 							dataSourceAdapterService.createDataAsset(dataSource.getDatasourceType(), new JsonObject(Json.encode(mes)), dataAssetCreateReply-> {
 								if (dataAssetCreateReply.succeeded()) {
-									next.handle(Future.succeededFuture(Json.decodeValue(dataAssetCreateReply.result().toString(), DataAsset.class)));
+									if (dataAssetCreateReply.result()==null){
+										dataAssetManager.delete(initCreateReply.result(), deleteReply -> {
+											if(deleteReply.succeeded()){
+												LOGGER.error(dataAssetCreateReply.cause());
+												next.handle(Future.failedFuture(dataAssetCreateReply.cause()));
+											} else{
+												LOGGER.info("INCONSISTENCY IN DATABASE. There is a DataAsset object in the database with no corresponding object in the adapter.");
+												next.handle(Future.failedFuture(deleteReply.cause()));
+											}
+										});
+									}
+									else {
+										next.handle(Future.succeededFuture(Json.decodeValue(dataAssetCreateReply.result().toString(), DataAsset.class)));
+									}
 								} else {
 									LOGGER.error(dataAssetCreateReply.cause());
 									next.handle(Future.failedFuture(dataAssetCreateReply.cause()));
