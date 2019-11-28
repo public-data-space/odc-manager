@@ -15,13 +15,13 @@ public class DataSourceAdapterServiceImpl implements DataSourceAdapterService {
     private Logger LOGGER = LoggerFactory.getLogger(DataSourceAdapterServiceImpl.class.getName());
 
     private WebClient webClient;
-    private int gatewayPort;
-    private String gatewayHost;
+    private int configManagerPort;
+    private String configManagerHost;
 
     public DataSourceAdapterServiceImpl(WebClient webClient, int gatewayPort, String gatewayHost, Handler<AsyncResult<DataSourceAdapterService>> readyHandler) {
         this.webClient = webClient;
-        this.gatewayHost = gatewayHost;
-        this.gatewayPort = gatewayPort;
+        this.configManagerHost = gatewayHost;
+        this.configManagerPort = gatewayPort;
 
         readyHandler.handle(Future.succeededFuture(this));
     }
@@ -55,10 +55,16 @@ public class DataSourceAdapterServiceImpl implements DataSourceAdapterService {
 
     @Override
     public DataSourceAdapterService getFile(String dataSourceType, JsonObject request, Handler<AsyncResult<JsonObject>> resultHandler) {
-
-        post(gatewayPort, gatewayHost, "/getFile/"+dataSourceType, request, reply -> {
-            if (reply.succeeded()) {
-                resultHandler.handle(Future.succeededFuture(reply.result()));
+        get(configManagerPort, configManagerHost,"/getAdapter/"+dataSourceType, reply -> {
+            if(reply.succeeded()) {
+                post(reply.result().getInteger("port"), reply.result().getString("host"), "/getFile/", request, adapterReply -> {
+                    if (adapterReply.succeeded()) {
+                        resultHandler.handle(Future.succeededFuture(adapterReply.result()));
+                    } else {
+                        LOGGER.error(adapterReply.cause());
+                        resultHandler.handle(Future.failedFuture(adapterReply.cause()));
+                    }
+                });
             } else {
                 LOGGER.error(reply.cause());
                 resultHandler.handle(Future.failedFuture(reply.cause()));
@@ -69,9 +75,16 @@ public class DataSourceAdapterServiceImpl implements DataSourceAdapterService {
 
     @Override
     public DataSourceAdapterService supported(String dataSourceType, Handler<AsyncResult<JsonObject>> resultHandler) {
-        get(gatewayPort, gatewayHost, "/supported/"+dataSourceType, reply -> {
-            if (reply.succeeded()) {
-                resultHandler.handle(Future.succeededFuture(reply.result()));
+        get(configManagerPort, configManagerHost,"/getAdapter/"+dataSourceType, reply -> {
+            if(reply.succeeded()) {
+                get(reply.result().getInteger("port"), reply.result().getString("host"), "/supported/", adapterReply -> {
+                    if (adapterReply.succeeded()) {
+                        resultHandler.handle(Future.succeededFuture(adapterReply.result()));
+                    } else {
+                        LOGGER.error(adapterReply.cause());
+                        resultHandler.handle(Future.failedFuture(adapterReply.cause()));
+                    }
+                });
             } else {
                 LOGGER.error(reply.cause());
                 resultHandler.handle(Future.failedFuture(reply.cause()));
@@ -82,9 +95,16 @@ public class DataSourceAdapterServiceImpl implements DataSourceAdapterService {
 
     @Override
     public DataSourceAdapterService delete(String dataSourceType, Long id, Handler<AsyncResult<JsonObject>> resultHandler) {
-        get(gatewayPort, gatewayHost, "/delete/"+dataSourceType+"/"+id, reply -> {
-            if (reply.succeeded()) {
-                resultHandler.handle(Future.succeededFuture(reply.result()));
+        get(configManagerPort, configManagerHost,"/getAdapter/"+dataSourceType, reply -> {
+            if(reply.succeeded()) {
+                get(reply.result().getInteger("port"), reply.result().getString("host"), "/delete/", adapterReply -> {
+                    if (adapterReply.succeeded()) {
+                        resultHandler.handle(Future.succeededFuture(adapterReply.result()));
+                    } else {
+                        LOGGER.error(adapterReply.cause());
+                        resultHandler.handle(Future.failedFuture(adapterReply.cause()));
+                    }
+                });
             } else {
                 LOGGER.error(reply.cause());
                 resultHandler.handle(Future.failedFuture(reply.cause()));
@@ -95,9 +115,16 @@ public class DataSourceAdapterServiceImpl implements DataSourceAdapterService {
 
     @Override
     public DataSourceAdapterService createDataAsset(String dataSourceType, JsonObject message, Handler<AsyncResult<JsonObject>> resultHandler) {
-        post(gatewayPort, gatewayHost, "/create/"+dataSourceType, message, reply -> {
-            if (reply.succeeded()) {
-                resultHandler.handle(Future.succeededFuture(reply.result()));
+        get(configManagerPort, configManagerHost,"/getAdapter/"+dataSourceType, reply -> {
+            if(reply.succeeded()) {
+                post(reply.result().getInteger("port"), reply.result().getString("host"), "/create/", message, adapterReply -> {
+                    if (adapterReply.succeeded()) {
+                        resultHandler.handle(Future.succeededFuture(adapterReply.result()));
+                    } else {
+                        LOGGER.error(adapterReply.cause());
+                        resultHandler.handle(Future.failedFuture(adapterReply.cause()));
+                    }
+                });
             } else {
                 LOGGER.error(reply.cause());
                 resultHandler.handle(Future.failedFuture(reply.cause()));
@@ -108,9 +135,17 @@ public class DataSourceAdapterServiceImpl implements DataSourceAdapterService {
 
     @Override
     public DataSourceAdapterService getDataAssetFormSchema(String dataSourceType, Handler<AsyncResult<JsonObject>> resultHandler) {
-        get(gatewayPort, gatewayHost, "/getDataAssetFormSchema/"+dataSourceType, reply -> {
-            if (reply.succeeded()) {
-                resultHandler.handle(Future.succeededFuture(reply.result()));
+        LOGGER.info(dataSourceType);
+        get(configManagerPort, configManagerHost,"/getAdapter/"+dataSourceType, reply -> {
+            if(reply.succeeded()) {
+                get(reply.result().getInteger("port"), reply.result().getString("host"), "/getDataAssetFormSchema/", adapterReply -> {
+                    if (adapterReply.succeeded()) {
+                        resultHandler.handle(Future.succeededFuture(adapterReply.result()));
+                    } else {
+                        LOGGER.error(adapterReply.cause());
+                        resultHandler.handle(Future.failedFuture(adapterReply.cause()));
+                    }
+                });
             } else {
                 LOGGER.error(reply.cause());
                 resultHandler.handle(Future.failedFuture(reply.cause()));
@@ -121,9 +156,17 @@ public class DataSourceAdapterServiceImpl implements DataSourceAdapterService {
 
     @Override
     public DataSourceAdapterService getDataSourceFormSchema(String dataSourceType,Handler<AsyncResult<JsonObject>> resultHandler) {
-        get(gatewayPort, gatewayHost, "/getDataSourceFormSchema/"+dataSourceType, reply -> {
-            if (reply.succeeded()) {
-                resultHandler.handle(Future.succeededFuture(reply.result()));
+        LOGGER.info(dataSourceType);
+        get(configManagerPort, configManagerHost,"/getAdapter/"+dataSourceType, reply -> {
+            if(reply.succeeded()) {
+                get(reply.result().getInteger("port"), reply.result().getString("host"), "/getDataSourceFormSchema/", adapterReply -> {
+                    if (adapterReply.succeeded()) {
+                        resultHandler.handle(Future.succeededFuture(adapterReply.result()));
+                    } else {
+                        LOGGER.error(adapterReply.cause());
+                        resultHandler.handle(Future.failedFuture(adapterReply.cause()));
+                    }
+                });
             } else {
                 LOGGER.error(reply.cause());
                 resultHandler.handle(Future.failedFuture(reply.cause()));
