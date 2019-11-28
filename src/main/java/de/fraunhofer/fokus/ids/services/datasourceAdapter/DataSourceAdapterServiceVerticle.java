@@ -30,7 +30,7 @@ public class DataSourceAdapterServiceVerticle extends AbstractVerticle {
 
         retriever.getConfig(ar -> {
             if (ar.succeeded()) {
-                DataSourceAdapterService.create(webClient, ar.result().getInteger("GATEWAY_PORT"), ar.result().getString("GATEWAY_HOST"),  ready -> {
+                DataSourceAdapterService.create(webClient, ar.result().getInteger("CONFIG_MANAGER_PORT"), ar.result().getString("CONFIG_MANAGER_HOST"),  ready -> {
                     if (ready.succeeded()) {
                         ServiceBinder binder = new ServiceBinder(vertx);
                         binder
