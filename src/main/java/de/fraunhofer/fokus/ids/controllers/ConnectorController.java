@@ -25,6 +25,7 @@ import org.apache.http.entity.mime.content.StringBody;
 import org.apache.http.impl.client.FutureRequestExecutionMetrics;
 
 import java.io.ByteArrayOutputStream;
+import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
@@ -48,7 +49,7 @@ public class ConnectorController {
 		Json.prettyMapper.setSerializationInclusion(JsonInclude.Include.NON_NULL);
 	}
 
-	public void data(long id, String extension, Handler<AsyncResult<ReturnObject>> resultHandler) {
+	public void data(long id, String extension, Handler<AsyncResult<File>> resultHandler) {
 		if(extension == null) {
 			payload(id, resultHandler);
 		}
@@ -100,11 +101,11 @@ public class ConnectorController {
 		});
 	}
 
-	private void payload(Long id, Handler<AsyncResult<ReturnObject>> resultHandler) {
+	private void payload(Long id, Handler<AsyncResult<File>> resultHandler) {
 		getPayload(id, FileType.MULTIPART, resultHandler);
 	}
 
-	private void payloadContent(Long id, String extension, Handler<AsyncResult<ReturnObject>> resultHandler) {
+	private void payloadContent(Long id, String extension, Handler<AsyncResult<File>> resultHandler) {
 		if(extension.equals("json")) {
 			getPayload(id, FileType.JSON, resultHandler);
 		}
@@ -114,7 +115,7 @@ public class ConnectorController {
 		getPayload(id, FileType.MULTIPART, resultHandler);
 	}
 
-	private void getPayload(Long id, FileType fileType, Handler<AsyncResult<ReturnObject>> resultHandler) {
+	private void getPayload(Long id, FileType fileType, Handler<AsyncResult<File>> resultHandler) {
 
 		dataAssetManager.findById(id, reply -> {
 			if (reply.succeeded()) {
@@ -131,12 +132,7 @@ public class ConnectorController {
 
 						dataSourceAdapterService.getFile(dataSource.getDatasourceType(), new JsonObject(Json.encode(request)), reply3 -> {
 							if(reply3.succeeded()){
-								FileResponse fileResponse = Json.decodeValue(reply3.result().toString(), FileResponse.class);
-								if(fileType.equals(FileType.JSON)) {
-									getJSON(fileResponse.getBody(), resultHandler);
-								} else {
-									getMultiPart(fileResponse.getBody(), fileType, resultHandler);
-								}
+								resultHandler.handle(Future.succeededFuture(new File(reply3.result())));
 							}
 							else{
 								LOGGER.error("FileContent could not be retrieved.",reply3.cause());
@@ -152,55 +148,6 @@ public class ConnectorController {
 			}
 			else {
 				LOGGER.error("DataAsset could not be read.",reply.cause());
-				resultHandler.handle(Future.failedFuture(reply.cause()));
-			}
-		});
-	}
-
-	private void getJSON(String fileContent, Handler<AsyncResult<ReturnObject>> resultHandler) {
-		IDSMetadata idsMetadata = new IDSMetadata();
-		idsService.getSelfDescriptionResponse( reply -> {
-			if(reply.succeeded()){
-				idsMetadata.header = Json.encodePrettily(reply.result());
-				idsMetadata.payload = fileContent;
-				ReturnObject returnObject = new ReturnObject(Json.encode(idsMetadata), "application/json");
-				resultHandler.handle(Future.succeededFuture(returnObject));
-			}
-			else{
-				resultHandler.handle(Future.failedFuture(reply.cause()));
-			}
-		});
-	}
-
-	private void getMultiPart(String fileContent, FileType fileType, Handler<AsyncResult<ReturnObject>> resultHandler) {
-
-		idsService.getSelfDescriptionResponse( reply -> {
-			if (reply.succeeded()) {
-				ContentBody	cb = new StringBody(Json.encodePrettily(reply.result()), ContentType.create("application/json"));
-				MultipartEntityBuilder multipartEntityBuilder = MultipartEntityBuilder.create()
-						.setBoundary("IDSMSGPART")
-						.setCharset(StandardCharsets.UTF_8)
-						.addPart("header", cb)
-						.addTextBody("payload", fileContent, ContentType.create("text/plain", StandardCharsets.UTF_8));
-
-				if(fileType.equals(FileType.MULTIPART)) {
-					multipartEntityBuilder.setContentType(ContentType.create("multipart/mixed"));
-				}
-				if(fileType.equals(FileType.TXT)) {
-					multipartEntityBuilder.setContentType(ContentType.create("text/plain"));
-				}
-
-				HttpEntity data = multipartEntityBuilder.build();
-				OutputStream out = new ByteArrayOutputStream();
-				try {
-					data.writeTo(out);
-				} catch (IOException e) {
-					LOGGER.error(e);
-					resultHandler.handle(Future.failedFuture(e.getMessage()));
-				}
-				ReturnObject returnObject = new ReturnObject(out.toString(), data.getContentType().getValue());
-				resultHandler.handle(Future.succeededFuture(returnObject));
-			} else {
 				resultHandler.handle(Future.failedFuture(reply.cause()));
 			}
 		});

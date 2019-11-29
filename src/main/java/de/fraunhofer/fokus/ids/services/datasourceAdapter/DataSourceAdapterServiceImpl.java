@@ -1,20 +1,17 @@
 package de.fraunhofer.fokus.ids.services.datasourceAdapter;
 
-import de.fraunhofer.fokus.ids.models.FileResponse;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Future;
 import io.vertx.core.Handler;
-import io.vertx.core.buffer.Buffer;
-import io.vertx.core.json.Json;
+import io.vertx.core.Vertx;
+import io.vertx.core.file.AsyncFile;
+import io.vertx.core.file.OpenOptions;
 import io.vertx.core.json.JsonObject;
 import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
-import io.vertx.ext.web.client.HttpResponse;
 import io.vertx.ext.web.client.WebClient;
-
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import io.vertx.ext.web.codec.BodyCodec;
+import java.util.UUID;
 
 /**
  * @author Vincent Bohlen, vincent.bohlen@fokus.fraunhofer.de
@@ -26,11 +23,14 @@ public class DataSourceAdapterServiceImpl implements DataSourceAdapterService {
     private WebClient webClient;
     private int configManagerPort;
     private String configManagerHost;
+    private Vertx vertx;
+    private String tempFileRootPath = "";
 
-    public DataSourceAdapterServiceImpl(WebClient webClient, int gatewayPort, String gatewayHost, Handler<AsyncResult<DataSourceAdapterService>> readyHandler) {
+    public DataSourceAdapterServiceImpl(Vertx vertx, WebClient webClient, int gatewayPort, String gatewayHost, String tempFileRootPath, Handler<AsyncResult<DataSourceAdapterService>> readyHandler) {
         this.webClient = webClient;
         this.configManagerHost = gatewayHost;
         this.configManagerPort = gatewayPort;
+        this.vertx = vertx;
 
         readyHandler.handle(Future.succeededFuture(this));
     }
@@ -48,20 +48,15 @@ public class DataSourceAdapterServiceImpl implements DataSourceAdapterService {
                 });
     }
 
-    private void download(int port, String host, String path, JsonObject payload, Handler<AsyncResult<JsonObject>> resultHandler) {
+    private void download(int port, String host, String path, JsonObject payload, Handler<AsyncResult<String>> resultHandler) {
+        String fileName = tempFileRootPath+UUID.randomUUID().toString();
+        AsyncFile asyncFile = vertx.fileSystem().openBlocking(fileName, new OpenOptions());
         webClient
                 .post(port, host, path)
+                .as(BodyCodec.pipe(asyncFile))
                 .sendJsonObject(payload, ar -> {
                     if (ar.succeeded()) {
-                        FileResponse fileResponse = new FileResponse();
-                        Map<String, List<String>> headers = new HashMap<>();
-                        for(String name : ar.result().headers().names()){
-                            headers.put(name, ar.result().headers().getAll(name));
-                        }
-                        LOGGER.info(ar.result().bodyAsString());
-                        fileResponse.setHeaders(headers);
-                        fileResponse.setBody(ar.result().bodyAsString());
-                        resultHandler.handle(Future.succeededFuture(new JsonObject(Json.encode(fileResponse))));
+                        resultHandler.handle(Future.succeededFuture(fileName));
                     } else {
                         LOGGER.error(ar.cause());
                         resultHandler.handle(Future.failedFuture(ar.cause()));
@@ -85,7 +80,7 @@ public class DataSourceAdapterServiceImpl implements DataSourceAdapterService {
     }
 
     @Override
-    public DataSourceAdapterService getFile(String dataSourceType, JsonObject request, Handler<AsyncResult<JsonObject>> resultHandler) {
+    public DataSourceAdapterService getFile(String dataSourceType, JsonObject request, Handler<AsyncResult<String>> resultHandler) {
         get(configManagerPort, configManagerHost,"/getAdapter/"+dataSourceType, reply -> {
             if(reply.succeeded()) {
                 download(reply.result().getInteger("port"), reply.result().getString("host"), "/getFile/", request, adapterReply -> {
@@ -128,7 +123,7 @@ public class DataSourceAdapterServiceImpl implements DataSourceAdapterService {
     public DataSourceAdapterService delete(String dataSourceType, Long id, Handler<AsyncResult<JsonObject>> resultHandler) {
         get(configManagerPort, configManagerHost,"/getAdapter/"+dataSourceType, reply -> {
             if(reply.succeeded()) {
-                get(reply.result().getInteger("port"), reply.result().getString("host"), "/delete/", adapterReply -> {
+                get(reply.result().getInteger("port"), reply.result().getString("host"), "/delete/"+id, adapterReply -> {
                     if (adapterReply.succeeded()) {
                         resultHandler.handle(Future.succeededFuture(adapterReply.result()));
                     } else {

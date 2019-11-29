@@ -17,7 +17,7 @@ import io.vertx.ext.web.client.WebClient;
 public interface DataSourceAdapterService {
 
     @Fluent
-    DataSourceAdapterService getFile(String dataSourceType, JsonObject request, Handler<AsyncResult<JsonObject>> resultHandler);
+    DataSourceAdapterService getFile(String dataSourceType, JsonObject request, Handler<AsyncResult<String>> resultHandler);
 
     @Fluent
     DataSourceAdapterService supported(String dataSourceType, Handler<AsyncResult<JsonObject>> resultHandler);
@@ -35,8 +35,8 @@ public interface DataSourceAdapterService {
     DataSourceAdapterService getDataSourceFormSchema(String dataSourceType, Handler<AsyncResult<JsonObject>> resultHandler);
 
     @GenIgnore
-    static DataSourceAdapterService create(WebClient webClient, int gatewayPort, String gatewayHost, Handler<AsyncResult<DataSourceAdapterService>> readyHandler) {
-        return new DataSourceAdapterServiceImpl(webClient, gatewayPort, gatewayHost, readyHandler);
+    static DataSourceAdapterService create(Vertx vertx, WebClient webClient, int gatewayPort, String gatewayHost, String tempFileRootPath, Handler<AsyncResult<DataSourceAdapterService>> readyHandler) {
+        return new DataSourceAdapterServiceImpl(vertx, webClient, gatewayPort, gatewayHost, tempFileRootPath, readyHandler);
     }
 
     @GenIgnore

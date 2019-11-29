@@ -14,6 +14,7 @@ import io.vertx.config.ConfigRetriever;
 import io.vertx.config.ConfigRetrieverOptions;
 import io.vertx.config.ConfigStoreOptions;
 import io.vertx.core.*;
+import io.vertx.core.buffer.Buffer;
 import io.vertx.core.http.HttpMethod;
 import io.vertx.core.http.HttpServer;
 import io.vertx.core.http.HttpServerResponse;
@@ -21,12 +22,16 @@ import io.vertx.core.json.Json;
 import io.vertx.core.json.JsonObject;
 import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
+import io.vertx.core.streams.Pump;
 import io.vertx.ext.web.Router;
 import io.vertx.ext.web.handler.BodyHandler;
 import io.vertx.ext.web.handler.CorsHandler;
 import io.vertx.ext.web.handler.JWTAuthHandler;
+import org.apache.http.HttpEntity;
 import org.apache.http.entity.ContentType;
+import org.apache.http.entity.mime.MultipartEntityBuilder;
 
+import java.io.*;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
@@ -155,11 +160,11 @@ public class MainVerticle extends AbstractVerticle{
 
 		router.route("/data/:id.:extension").handler(routingContext ->
 				connectorController.data(Long.parseLong(routingContext.request().getParam("id")), routingContext.request().getParam("extension"), result ->
-					replyWithContentType(result, routingContext.response())));
+						replyFile(result, routingContext.response())));
 
 		router.route("/data/:id").handler(routingContext ->
 				connectorController.data(Long.parseLong(routingContext.request().getParam("id")), "", result ->
-					replyWithContentType(result, routingContext.response())));
+						replyFile(result, routingContext.response())));
 
 
 		router.route("/api/*").handler(JWTAuthHandler.create(authManager.getProvider()));
@@ -270,7 +275,20 @@ public class MainVerticle extends AbstractVerticle{
 			reply(result.result(), response);
 		}
 		else{
-			LOGGER.error("Result Future failed.\n\n"+result.cause());
+			LOGGER.error("Result Future failed.",result.cause());
+			response.setStatusCode(404).end();
+		}
+	}
+
+	private void replyFile(AsyncResult<File> result, HttpServerResponse response){
+		if(result.succeeded()){
+			if(result.result() != null) {
+				response.sendFile(result.result().toString());
+				new File(result.result().toString()).delete();
+			}
+		}
+		else{
+			LOGGER.error("Result Future failed.",result.cause());
 			response.setStatusCode(404).end();
 		}
 	}
@@ -289,7 +307,7 @@ public class MainVerticle extends AbstractVerticle{
 			}
 		}
 		else {
-			LOGGER.error("Result Future failed.\n\n"+result.cause());
+			LOGGER.error("Result Future failed.",result.cause());
 			response.setStatusCode(404).end();
 		}
 	}
