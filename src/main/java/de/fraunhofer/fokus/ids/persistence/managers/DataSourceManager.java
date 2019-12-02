@@ -35,7 +35,7 @@ public class DataSourceManager {
 
         JsonArray params = new JsonArray()
                 .add(checkNull(dataSource.getDatasourceName()))
-                .add(dataSource.getData())
+                .add(dataSource.getData().toString())
                 .add(dataSource.getDatasourceType())
                 .add(dataSource.getId());
 
