@@ -218,8 +218,8 @@ public class MainVerticle extends AbstractVerticle{
 		router.route("/api/datasources/find/type/:type").handler(routingContext ->
 				dataSourceController.findByType(routingContext.request().getParam("type"), result -> reply(result, routingContext.response())));
 
-		router.post("/api/datasources/edit/").handler(routingContext ->
-				dataSourceController.update(Json.decodeValue(routingContext.getBodyAsJson().toString(), DataSource.class), result -> reply(result, routingContext.response())));
+		router.post("/api/datasources/edit/:id").handler(routingContext ->
+				dataSourceController.update(toDataSource(routingContext.getBodyAsJson()),Long.parseLong(routingContext.request().getParam("id")), result -> reply(result, routingContext.response())));
 
 		router.route("/api/datasources/schema/type/:type").handler(routingContext ->
 				dataSourceController.getFormSchema(routingContext.request().getParam("type"), result -> reply(result, routingContext.response())));

@@ -37,7 +37,6 @@ public class DataSourceController {
     }
 
     public void add(DataSource dataSource, Handler<AsyncResult<JsonObject>> resultHandler) {
-
         if(dataSource.getDatasourceName() == null || dataSource.getDatasourceName().isEmpty()) {
             JsonObject jO = new JsonObject();
             jO.put("status", "error");
@@ -87,7 +86,8 @@ public class DataSourceController {
         });
     }
 
-    public void update(DataSource dataSource, Handler<AsyncResult<JsonObject>> resultHandler) {
+    public void update(DataSource dataSource,Long id, Handler<AsyncResult<JsonObject>> resultHandler) {
+        dataSource.setId(id);
         dataSourceManager.update(dataSource, reply -> {
             if(reply.succeeded()) {
                 JsonObject jO = new JsonObject();
@@ -139,7 +139,6 @@ public class DataSourceController {
                         JsonObject newjO = new JsonObject()
                                 .put("source", reply.result())
                                 .put("formSchema", reply2.result());
-
                         resultHandler.handle(Future.succeededFuture(newjO));
                     }
                         });
