@@ -10,6 +10,7 @@ import de.fraunhofer.fokus.ids.persistence.managers.DataAssetManager;
 import de.fraunhofer.fokus.ids.persistence.managers.DataSourceManager;
 import de.fraunhofer.fokus.ids.services.IDSService;
 import de.fraunhofer.fokus.ids.services.datasourceAdapter.DataSourceAdapterService;
+import de.fraunhofer.iais.eis.ArtifactResponseMessage;
 import de.fraunhofer.iais.eis.Connector;
 import de.fraunhofer.iais.eis.SelfDescriptionResponse;
 import io.vertx.core.*;
@@ -22,12 +23,8 @@ import org.apache.http.entity.ContentType;
 import org.apache.http.entity.mime.MultipartEntityBuilder;
 import org.apache.http.entity.mime.content.ContentBody;
 import org.apache.http.entity.mime.content.StringBody;
-import org.apache.http.impl.client.FutureRequestExecutionMetrics;
 
-import java.io.ByteArrayOutputStream;
-import java.io.File;
-import java.io.IOException;
-import java.io.OutputStream;
+import java.io.*;
 import java.nio.charset.StandardCharsets;
 
 /**
@@ -49,7 +46,40 @@ public class ConnectorController {
 		Json.prettyMapper.setSerializationInclusion(JsonInclude.Include.NON_NULL);
 	}
 
-	public void data(long id, String extension, Handler<AsyncResult<File>> resultHandler) {
+
+	public void data(long id, String extension, Handler<AsyncResult<HttpEntity>> resultHandler){
+
+		Future<ArtifactResponseMessage> artifactResponseFuture = Future.future();
+		Future<File> fileFuture = Future.future();
+		idsService.getArtifactResponse(artifactResponseFuture.completer());
+		buildDataAssetReturn(id, extension, fileFuture.completer());
+		CompositeFuture.all(artifactResponseFuture, fileFuture).setHandler( reply -> {
+			if(reply.succeeded()) {
+				MultipartEntityBuilder multipartEntityBuilder = MultipartEntityBuilder.create()
+						.setBoundary("IDSMSGPART")
+						.addTextBody("header", Json.encodePrettily(artifactResponseFuture.result()), ContentType.APPLICATION_JSON)
+						.addBinaryBody("payload", fileFuture.result());
+
+				resultHandler.handle(Future.succeededFuture(multipartEntityBuilder.build()));
+			}
+			else{
+				LOGGER.error("Could not create response.");
+			}
+		});
+	}
+
+	public void payload(long id, String extension, Handler<AsyncResult<File>> resultHandler) {
+		buildDataAssetReturn(id, extension, reply -> {
+			if(reply.succeeded()){
+				resultHandler.handle(Future.succeededFuture(reply.result()));
+			}
+			else{
+				resultHandler.handle(Future.failedFuture(reply.cause()));
+			}
+		});
+	}
+
+	private void buildDataAssetReturn(long id, String extension, Handler<AsyncResult<File>> resultHandler){
 		if(extension == null) {
 			payload(id, resultHandler);
 		}

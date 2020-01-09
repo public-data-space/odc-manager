@@ -49,6 +49,30 @@ public class IDSService {
 		});
 	}
 
+	public void getArtifactResponse(Handler<AsyncResult<ArtifactResponseMessage>> resultHandler) {
+		getConfiguration(config -> {
+			if(config.succeeded()){
+				resultHandler.handle(Future.succeededFuture( buildArtifactResponseMessage(config.result())));
+			} else {
+				LOGGER.error(config.cause());
+				resultHandler.handle(Future.failedFuture(config.cause()));
+			}
+		});
+	}
+
+	private ArtifactResponseMessage buildArtifactResponseMessage(JsonObject config) {
+		try {
+			return new ArtifactResponseMessageBuilder(new URI(config.getString("url") + "#SelfDescriptionResponse"))
+					._issued_(getDate())
+					._issuerConnector_(new URI(config.getString("url")))
+					._modelVersion_(INFO_MODEL_VERSION)
+					.build();
+		} catch (URISyntaxException e) {
+			LOGGER.error(e);
+		}
+		return null;
+	}
+
 	private XMLGregorianCalendar getDate(){
 		GregorianCalendar c = new GregorianCalendar();
 		c.setTime(new Date());

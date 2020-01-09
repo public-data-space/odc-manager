@@ -158,14 +158,17 @@ public class MainVerticle extends AbstractVerticle{
 				connectorController.about(routingContext.request().getParam("extension"), result ->
 						replyWithContentType(result, routingContext.response())));
 
-		router.route("/data/:id.:extension").handler(routingContext ->
-				connectorController.data(Long.parseLong(routingContext.request().getParam("id")), routingContext.request().getParam("extension"), result ->
+		router.route("/payload/:id.:extension").handler(routingContext ->
+				connectorController.payload(Long.parseLong(routingContext.request().getParam("id")), routingContext.request().getParam("extension"), result ->
+						replyFile(result, routingContext.response())));
+
+		router.route("/payload/:id").handler(routingContext ->
+				connectorController.payload(Long.parseLong(routingContext.request().getParam("id")), "", result ->
 						replyFile(result, routingContext.response())));
 
 		router.route("/data/:id").handler(routingContext ->
 				connectorController.data(Long.parseLong(routingContext.request().getParam("id")), "", result ->
-						replyFile(result, routingContext.response())));
-
+						replyMessage(result, routingContext.response())));
 
 		router.route("/api/*").handler(JWTAuthHandler.create(authManager.getProvider()));
 
@@ -293,7 +296,25 @@ public class MainVerticle extends AbstractVerticle{
 		}
 	}
 
-		private void replyWithContentType(AsyncResult<ReturnObject> result, HttpServerResponse response){
+	private void replyMessage(AsyncResult<HttpEntity> result, HttpServerResponse response){
+		if(result.succeeded()){
+			if(result.result() != null) {
+				try(ByteArrayOutputStream baos = new ByteArrayOutputStream()){
+					result.result().writeTo(baos);
+					response.end(Buffer.buffer(baos.toByteArray()));
+				} catch (IOException e) {
+					e.printStackTrace();
+				}
+			}
+		}
+		else{
+			LOGGER.error("Result Future failed.",result.cause());
+			response.setStatusCode(404).end();
+		}
+	}
+
+
+	private void replyWithContentType(AsyncResult<ReturnObject> result, HttpServerResponse response){
 		if (result.succeeded()) {
 			if(result.result() != null) {
 				ReturnObject returnObject = result.result();
