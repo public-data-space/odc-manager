@@ -150,23 +150,27 @@ public class MainVerticle extends AbstractVerticle{
 				})
 		);
 
-		router.route("/about/").handler(routingContext ->
-				connectorController.about("",result ->
-						replyWithContentType(result, routingContext.response())));
+		router.get("/about/").handler(routingContext ->
+				connectorController.about(result ->
+						reply(result, routingContext.response())));
 
-		router.route("/about/:extension").handler(routingContext ->
-				connectorController.about(routingContext.request().getParam("extension"), result ->
-						replyWithContentType(result, routingContext.response())));
+		router.get("/about/:extension").handler(routingContext ->
+				connectorController.about( result ->
+						reply(result, routingContext.response())));
 
-		router.route("/payload/:id.:extension").handler(routingContext ->
+		router.post("/about/").handler(routingContext ->
+				connectorController.multiPartAbout(result ->
+						replyMessage(result, routingContext.response())));
+
+		router.get("/data/:id.:extension").handler(routingContext ->
 				connectorController.payload(Long.parseLong(routingContext.request().getParam("id")), routingContext.request().getParam("extension"), result ->
 						replyFile(result, routingContext.response())));
 
-		router.route("/payload/:id").handler(routingContext ->
+		router.get("/data/:id").handler(routingContext ->
 				connectorController.payload(Long.parseLong(routingContext.request().getParam("id")), "", result ->
 						replyFile(result, routingContext.response())));
 
-		router.route("/data/:id").handler(routingContext ->
+		router.post("/data/:id").handler(routingContext ->
 				connectorController.data(Long.parseLong(routingContext.request().getParam("id")), "", result ->
 						replyMessage(result, routingContext.response())));
 
@@ -190,7 +194,6 @@ public class MainVerticle extends AbstractVerticle{
 
 		router.route("/api/dataassets/").handler(routingContext ->
 				dataAssetController.index(result -> reply(result, routingContext.response())));
-
 
 		router.route("/api/dataassets/counts/").handler(routingContext ->
 				dataAssetController.counts(result -> reply(result, routingContext.response())));
@@ -308,26 +311,6 @@ public class MainVerticle extends AbstractVerticle{
 			}
 		}
 		else{
-			LOGGER.error("Result Future failed.",result.cause());
-			response.setStatusCode(404).end();
-		}
-	}
-
-
-	private void replyWithContentType(AsyncResult<ReturnObject> result, HttpServerResponse response){
-		if (result.succeeded()) {
-			if(result.result() != null) {
-				ReturnObject returnObject = result.result();
-				String entity = returnObject.getEntity();
-				response.putHeader("content-type", returnObject.getType());
-				response.end(entity);
-			}
-			else{
-				LOGGER.error("Resultbody was empty.");
-				response.setStatusCode(404).end();
-			}
-		}
-		else {
 			LOGGER.error("Result Future failed.",result.cause());
 			response.setStatusCode(404).end();
 		}

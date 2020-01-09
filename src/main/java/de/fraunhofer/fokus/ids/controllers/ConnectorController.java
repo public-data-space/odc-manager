@@ -52,7 +52,7 @@ public class ConnectorController {
 		Future<ArtifactResponseMessage> artifactResponseFuture = Future.future();
 		Future<File> fileFuture = Future.future();
 		idsService.getArtifactResponse(artifactResponseFuture.completer());
-		buildDataAssetReturn(id, extension, fileFuture.completer());
+		payload(id, extension, fileFuture.completer());
 		CompositeFuture.all(artifactResponseFuture, fileFuture).setHandler( reply -> {
 			if(reply.succeeded()) {
 				MultipartEntityBuilder multipartEntityBuilder = MultipartEntityBuilder.create()
@@ -88,16 +88,7 @@ public class ConnectorController {
 		}
 	}
 
-	public void about(String extension, Handler<AsyncResult<ReturnObject>> resultHandler) {
-		FileType type;
-		try{
-			type = FileType.valueOf(extension.toUpperCase());
-		}
-		catch(Exception e){
-			type = FileType.TTL;
-		}
-		String contentType = getContentType(type);
-
+	public void multiPartAbout(Handler<AsyncResult<HttpEntity>> resultHandler) {
 		Future<Connector> connectorFuture = Future.future();
 		idsService.getConnector(connectorFuture.completer());
 		Future<SelfDescriptionResponse> responseFuture = Future.future();
@@ -115,14 +106,20 @@ public class ConnectorController {
 						.addPart("header", cb)
 						.addPart("payload", result);
 
-				ByteArrayOutputStream out = new ByteArrayOutputStream();
-				try {
-					multipartEntityBuilder.build().writeTo(out);
-				} catch (IOException e) {
-					LOGGER.error(e);
-					resultHandler.handle(Future.failedFuture(e.getMessage()));
-				}
-				resultHandler.handle(Future.succeededFuture(new ReturnObject(out.toString(), contentType)));
+				resultHandler.handle(Future.succeededFuture(multipartEntityBuilder.build()));
+			}
+			else {
+				LOGGER.error("Connector Object could not be retrieved.",reply.cause());
+				resultHandler.handle(Future.failedFuture(reply.cause()));
+			}
+		});
+	}
+
+	public void about(Handler<AsyncResult<String>> resultHandler) {
+
+		idsService.getConnector( reply -> {
+			if (reply.succeeded()) {
+				resultHandler.handle(Future.succeededFuture(Json.encodePrettily(reply.result())));
 			}
 			else {
 				LOGGER.error("Connector Object could not be retrieved.",reply.cause());
