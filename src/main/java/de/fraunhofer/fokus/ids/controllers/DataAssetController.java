@@ -75,7 +75,6 @@ public class DataAssetController {
     }
 
     public void add(DataAssetDescription dataAssetDescription, Handler<AsyncResult<JsonObject>> resultHandler) {
-
         if (dataAssetDescription.getData().isEmpty()) {
             JsonObject jO = new JsonObject();
             jO.put("status", "error");
@@ -105,33 +104,75 @@ public class DataAssetController {
     }
 
     private void initiateDataAssetCreation(Handler<AsyncResult<DataAsset>> next, DataAssetDescription dataAssetDescription) {
+
         dataAssetManager.addInitial(initCreateReply -> {
             if (initCreateReply.succeeded()) {
-                dataSourceManager.findById(Integer.toUnsignedLong(dataAssetDescription.getSourceId()), dataSourceReply -> {
-                    if (dataSourceReply.succeeded()) {
-                        DataSource dataSource = Json.decodeValue(dataSourceReply.result().toString(), DataSource.class);
+                if (dataAssetDescription.getDatasourcetype().equals("File Upload")){
+                    dataSourceManager.findByType("File Upload",dataSourceReply -> {
+                        DataAsset dataAsset = new DataAsset();
+                        if (dataSourceReply.succeeded()){
+                            String dts = dataSourceReply.result().toString().replace("[","").replace("]","");
+                            DataSource dataSource = Json.decodeValue(dts, DataSource.class);
+                            DataAssetCreateMessage mes = new DataAssetCreateMessage();
+                            mes.setData(new JsonObject(dataAssetDescription.getData()));
+                            mes.setDataSource(dataSource);
+                            mes.setDataAssetId(initCreateReply.result());
 
-                        DataAssetCreateMessage mes = new DataAssetCreateMessage();
-                        mes.setData(new JsonObject(dataAssetDescription.getData()));
-                        mes.setDataSource(dataSource);
-                        mes.setDataAssetId(initCreateReply.result());
+                            dataAsset.setId(mes.getDataAssetId());
+                            dataAsset.setSourceID(dataSource.getId());
+                            dataAsset.setFormat(mes.getData().getString("format", null));
+                            dataAsset.setName(mes.getData().getString("name", null));
+                            dataAsset.setResourceID(mes.getData().getString("resourceid", null));
+                            dataAsset.setUrl(mes.getData().getString("file", null));
+                            dataAsset.setOrignalResourceURL(mes.getData().getString("originalurl", null));
+                            dataAsset.setDatasetID(mes.getData().getString("datasetId", null));
+                            dataAsset.setDatasetNotes(mes.getData().getString("datasetnotes", null));
+                            dataAsset.setDatasetTitle(mes.getData().getString("datasettitle", null));
+                            dataAsset.setLicenseTitle(mes.getData().getString("licensetitle", null));
+                            dataAsset.setLicenseUrl(mes.getData().getString("licenseurl", null));
+                            dataAsset.setOrignalDatasetURL(mes.getData().getString("originaldataseturl", null));
+                            dataAsset.setOrganizationDescription(mes.getData().getString("organizationdescription", null));
+                            dataAsset.setOrganizationTitle(mes.getData().getString("originalURL", null));
+                            dataAsset.setTags(mes.getData().getJsonArray("tags",new JsonArray()).getList());
+                            dataAsset.setVersion(mes.getData().getString("version", null));
+                            dataAsset.setDataSetDescription(mes.getData().getString("datasetdescription", null));
+                            dataAsset.setSignature(mes.getData().getString("signature", null));
+                            dataAsset.setStatus(DataAssetStatus.APPROVED);
+                            next.handle(Future.succeededFuture(dataAsset));
+                        }
+                        else {
+                            LOGGER.error(dataSourceReply.cause());
+                            next.handle(Future.failedFuture(dataSourceReply.cause()));
+                        }
+                    });
+                }
+                else {
+                    dataSourceManager.findById(Integer.toUnsignedLong(dataAssetDescription.getSourceId()), dataSourceReply -> {
+                        if (dataSourceReply.succeeded()) {
+                            DataSource dataSource = Json.decodeValue(dataSourceReply.result().toString(), DataSource.class);
 
-                        dataSourceAdapterService.createDataAsset(dataSource.getDatasourceType(), new JsonObject(Json.encode(mes)), dataAssetCreateReply -> {
-                            if (dataAssetCreateReply.succeeded()) {
-                                if (dataAssetCreateReply.result() == null) {
-                                    cleanUpDataAssetDummy(next, initCreateReply.result(), dataAssetCreateReply.cause());
+                            DataAssetCreateMessage mes = new DataAssetCreateMessage();
+                            mes.setData(new JsonObject(dataAssetDescription.getData()));
+                            mes.setDataSource(dataSource);
+                            mes.setDataAssetId(initCreateReply.result());
+
+                            dataSourceAdapterService.createDataAsset(dataSource.getDatasourceType(), new JsonObject(Json.encode(mes)), dataAssetCreateReply -> {
+                                if (dataAssetCreateReply.succeeded()) {
+                                    if (dataAssetCreateReply.result() == null) {
+                                        cleanUpDataAssetDummy(next, initCreateReply.result(), dataAssetCreateReply.cause());
+                                    } else {
+                                        next.handle(Future.succeededFuture(Json.decodeValue(dataAssetCreateReply.result().toString(), DataAsset.class)));
+                                    }
                                 } else {
-                                    next.handle(Future.succeededFuture(Json.decodeValue(dataAssetCreateReply.result().toString(), DataAsset.class)));
+                                    cleanUpDataAssetDummy(next, initCreateReply.result(), dataAssetCreateReply.cause());
                                 }
-                            } else {
-                                cleanUpDataAssetDummy(next, initCreateReply.result(), dataAssetCreateReply.cause());
-                            }
-                        });
-                    } else {
-                        LOGGER.error(dataSourceReply.cause());
-                        next.handle(Future.failedFuture(dataSourceReply.cause()));
-                    }
-                });
+                            });
+                        } else {
+                            LOGGER.error(dataSourceReply.cause());
+                            next.handle(Future.failedFuture(dataSourceReply.cause()));
+                        }
+                    });
+                }
             } else {
                 LOGGER.error(initCreateReply.cause());
                 next.handle(Future.failedFuture(initCreateReply.cause()));
@@ -154,7 +195,6 @@ public class DataAssetController {
 	private void createDataAsset(long jobId, AsyncResult<DataAsset> res) {
 		if (res.succeeded()) {
 			LOGGER.info("DataAsset was successfully created.");
-
 			dataAssetManager.add(new JsonObject(Json.encode(res.result())), reply -> {
 				if (reply.succeeded()) {
 					LOGGER.info("DataAsset was successfully inserted to the DB.");
@@ -207,7 +247,7 @@ public class DataAssetController {
 		dataAssetManager.findById(id, dataAssetReply -> {
 			if(dataAssetReply.succeeded()){
 				dataSourceManager.findById(Json.decodeValue(dataAssetReply.result().toString(), DataAsset.class).getSourceID(), reply2 -> {
-					if(reply2.succeeded()){
+				    if(reply2.succeeded()){
 						Future<JsonObject> serviceDeleteFuture = Future.future();
 						dataSourceAdapterService.delete(reply2.result().getString("datasourcetype"), id, serviceDeleteFuture.completer());
 

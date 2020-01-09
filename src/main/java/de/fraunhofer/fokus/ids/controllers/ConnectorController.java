@@ -17,18 +17,17 @@ import io.vertx.core.json.Json;
 import io.vertx.core.json.JsonObject;
 import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
-import org.apache.http.HttpEntity;
 import org.apache.http.entity.ContentType;
 import org.apache.http.entity.mime.MultipartEntityBuilder;
 import org.apache.http.entity.mime.content.ContentBody;
 import org.apache.http.entity.mime.content.StringBody;
-import org.apache.http.impl.client.FutureRequestExecutionMetrics;
 
-import java.io.ByteArrayOutputStream;
-import java.io.File;
-import java.io.IOException;
-import java.io.OutputStream;
+import java.io.*;
 import java.nio.charset.StandardCharsets;
+import java.util.*;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 /**
  * @author Vincent Bohlen, vincent.bohlen@fokus.fraunhofer.de
@@ -114,43 +113,95 @@ public class ConnectorController {
 		}
 		getPayload(id, FileType.MULTIPART, resultHandler);
 	}
+	private void addToZipFile(List<String> myList, ZipOutputStream zipOut) throws IOException {
+		for (String filePath : myList){
+			File input = new File(filePath.trim());
+			FileInputStream fis = new FileInputStream(input);
+			ZipEntry ze = new ZipEntry(input.getName());
+			zipOut.putNextEntry(ze);
+			byte[] tmp = new byte[4*1024];
+			int size;
+			while((size = fis.read(tmp)) != -1){
+				zipOut.write(tmp, 0, size);
+			}
+			zipOut.flush();
+			fis.close();
+		}
+		zipOut.close();
 
+	}
 	private void getPayload(Long id, FileType fileType, Handler<AsyncResult<File>> resultHandler) {
+		dataSourceManager.findByType("File Upload",jsonObjectAsyncResult -> {
+			if (jsonObjectAsyncResult.succeeded()){
+				String dts = jsonObjectAsyncResult.result().toString().replace("[","").replace("]","");
+				DataSource dataSourceFileUpload = Json.decodeValue(dts, DataSource.class);
+				dataAssetManager.findById(id, reply -> {
+					if (reply.succeeded()) {
+						DataAsset dataAsset = Json.decodeValue(reply.result().toString(), DataAsset.class);
+						if (dataAsset.getSourceID().equals(dataSourceFileUpload.getId())) {
+							String getFiles = dataAsset.getUrl();
+							String replace = getFiles.replace("[","");
+							String replace1 = replace.replace("]","");
+							List<String> myList = Arrays.asList(replace1.split(","));
+							if (myList.size()>1){
+								String tempName = "test.zip";
+								File file = new File(tempName);
+								FileOutputStream fos ;
+								ZipOutputStream zipOut ;
+								try {
+									fos = new FileOutputStream(tempName);
+									zipOut = new ZipOutputStream(new BufferedOutputStream(fos));
+									addToZipFile(myList,zipOut);
+								} catch (IOException e) {
+									e.printStackTrace();
+								}
 
-		dataAssetManager.findById(id, reply -> {
-			if (reply.succeeded()) {
-				DataAsset dataAsset = Json.decodeValue(reply.result().toString(), DataAsset.class);
-
-				dataSourceManager.findById(dataAsset.getSourceID(), reply2 -> {
-					if(reply2.succeeded()){
-						DataSource dataSource = Json.decodeValue(reply2.result().toString(), DataSource.class);
-
-						ResourceRequest request = new ResourceRequest();
-						request.setDataSource(dataSource);
-						request.setDataAsset(dataAsset);
-						request.setFileType(fileType);
-
-						dataSourceAdapterService.getFile(dataSource.getDatasourceType(), new JsonObject(Json.encode(request)), reply3 -> {
-							if(reply3.succeeded()){
-								resultHandler.handle(Future.succeededFuture(new File(reply3.result())));
+								resultHandler.handle(Future.succeededFuture(file));
+							}else {
+								File file = new File(myList.get(0));
+								resultHandler.handle(Future.succeededFuture(file));
 							}
-							else{
-								LOGGER.error("FileContent could not be retrieved.",reply3.cause());
-								resultHandler.handle(Future.failedFuture(reply3.cause()));
-							}
-						});
+						}
+						else {
+							dataSourceManager.findById(dataAsset.getSourceID(), reply2 -> {
+								if(reply2.succeeded()){
+									DataSource dataSource = Json.decodeValue(reply2.result().toString(), DataSource.class);
+
+									ResourceRequest request = new ResourceRequest();
+									request.setDataSource(dataSource);
+									request.setDataAsset(dataAsset);
+									request.setFileType(fileType);
+
+									dataSourceAdapterService.getFile(dataSource.getDatasourceType(), new JsonObject(Json.encode(request)), reply3 -> {
+										if(reply3.succeeded()){
+											resultHandler.handle(Future.succeededFuture(new File(reply3.result())));
+										}
+										else{
+											LOGGER.error("FileContent could not be retrieved.",reply3.cause());
+											resultHandler.handle(Future.failedFuture(reply3.cause()));
+										}
+									});
+								}
+								else{
+									LOGGER.error("DataAsset could not be retrieved.",reply2.cause());
+									resultHandler.handle(Future.failedFuture(reply2.cause()));
+								}
+							});
+						}
+
 					}
-					else{
-						LOGGER.error("DataAsset could not be retrieved.",reply2.cause());
-						resultHandler.handle(Future.failedFuture(reply2.cause()));
+					else {
+						LOGGER.error("DataAsset could not be read.",reply.cause());
+						resultHandler.handle(Future.failedFuture(reply.cause()));
 					}
 				});
 			}
 			else {
-				LOGGER.error("DataAsset could not be read.",reply.cause());
-				resultHandler.handle(Future.failedFuture(reply.cause()));
+				LOGGER.error("Error ",jsonObjectAsyncResult.cause());
+				resultHandler.handle(Future.failedFuture(jsonObjectAsyncResult.cause()));
 			}
 		});
+
 	}
 
 	private String getContentType(FileType fileType) {

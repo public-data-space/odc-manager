@@ -121,21 +121,26 @@ public class DataSourceAdapterServiceImpl implements DataSourceAdapterService {
 
     @Override
     public DataSourceAdapterService delete(String dataSourceType, Long id, Handler<AsyncResult<JsonObject>> resultHandler) {
-        get(configManagerPort, configManagerHost,"/getAdapter/"+dataSourceType, reply -> {
-            if(reply.succeeded()) {
-                get(reply.result().getInteger("port"), reply.result().getString("host"), "/delete/"+id, adapterReply -> {
-                    if (adapterReply.succeeded()) {
-                        resultHandler.handle(Future.succeededFuture(adapterReply.result()));
-                    } else {
-                        LOGGER.error(adapterReply.cause());
-                        resultHandler.handle(Future.failedFuture(adapterReply.cause()));
-                    }
-                });
-            } else {
-                LOGGER.error(reply.cause());
-                resultHandler.handle(Future.failedFuture(reply.cause()));
-            }
-        });
+        if (dataSourceType.equals("File Upload")){
+            resultHandler.handle(Future.succeededFuture(null));
+        }
+        else{
+            get(configManagerPort, configManagerHost,"/getAdapter/"+dataSourceType, reply -> {
+                if(reply.succeeded()) {
+                    get(reply.result().getInteger("port"), reply.result().getString("host"), "/delete/"+id, adapterReply -> {
+                        if (adapterReply.succeeded()) {
+                            resultHandler.handle(Future.succeededFuture(adapterReply.result()));
+                        } else {
+                            LOGGER.error(adapterReply.cause());
+                            resultHandler.handle(Future.failedFuture(adapterReply.cause()));
+                        }
+                    });
+                } else {
+                    LOGGER.error(reply.cause());
+                    resultHandler.handle(Future.failedFuture(reply.cause()));
+                }
+            });
+        }
         return this;
     }
 

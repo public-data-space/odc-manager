@@ -7,6 +7,7 @@ import io.vertx.config.ConfigRetriever;
 import io.vertx.config.ConfigRetrieverOptions;
 import io.vertx.config.ConfigStoreOptions;
 import io.vertx.core.*;
+import io.vertx.core.json.Json;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.core.logging.Logger;
@@ -27,6 +28,7 @@ public class InitService{
 	private Vertx vertx;
 
 	private final String ADMIN_CREATE_QUERY = "INSERT INTO public.user(created_at, updated_at, username, password) SELECT NOW(), NOW(), ?, ? WHERE NOT EXISTS ( SELECT 1 FROM public.user WHERE username=?)";
+	private final String DATASOURCEFILEUPLOAD_CREATE_QUERY = "INSERT INTO datasource(created_at, updated_at, datasourcename,data, datasourcetype) SELECT NOW(), NOW(), ?, ? ,? WHERE NOT EXISTS ( SELECT 1 FROM datasource WHERE datasourcetype=?)";
 	private final String USER_TABLE_CREATE_QUERY = "CREATE TABLE IF NOT EXISTS public.user (id SERIAL , created_at TIMESTAMP , updated_at TIMESTAMP , username TEXT, password TEXT)";
 	private final String DATAASSET_TABLE_CREATE_QUERY = "CREATE TABLE IF NOT EXISTS dataasset (id SERIAL, created_at TIMESTAMP, updated_at TIMESTAMP, datasetid TEXT, name TEXT, url TEXT, format TEXT, licenseurl TEXT, licensetitle TEXT, datasettitle TEXT, datasetnotes TEXT, orignalresourceurl TEXT, orignaldataseturl TEXT, signature TEXT, status INTEGER, resourceid TEXT, tags TEXT[] , datasetdescription TEXT, organizationtitle TEXT, organizationdescription TEXT, version TEXT, sourceid TEXT)";
 	private final String DATASOURCE_TABLE_CREATE_QUERY = "CREATE TABLE IF NOT EXISTS datasource (id SERIAL, created_at TIMESTAMP, updated_at TIMESTAMP, datasourcename TEXT, data JSONB, datasourcetype TEXT)";
@@ -52,6 +54,7 @@ public class InitService{
 						resultHandler.handle(Future.failedFuture(reply2.cause()));
 					}
 				});
+
 			}
 		});
 	}
@@ -97,7 +100,20 @@ public class InitService{
 						.add(ar.result().getString("FRONTEND_ADMIN")), reply -> {
 					if (reply.succeeded()) {
 						LOGGER.info("Adminuser created.");
-						resultHandler.handle(Future.succeededFuture());
+						JsonObject jsonObject = new JsonObject();
+						databaseService.update(DATASOURCEFILEUPLOAD_CREATE_QUERY, new JsonArray()
+								.add("File Upload")
+								.add(jsonObject)
+								.add("File Upload")
+								.add("File Upload"), reply2 -> {
+							if (reply2.succeeded()) {
+								LOGGER.info("FileUpload DataSource created.");
+								resultHandler.handle(Future.succeededFuture());
+							} else {
+								LOGGER.error("FileUpload DataSource creation failed.", reply2.cause());
+								resultHandler.handle(Future.failedFuture(reply2.cause()));
+							}
+						});
 					} else {
 						LOGGER.error("Adminuser creation failed.", reply.cause());
 						resultHandler.handle(Future.failedFuture(reply.cause()));
@@ -110,4 +126,5 @@ public class InitService{
 			}
 		});
 	}
+
 }
