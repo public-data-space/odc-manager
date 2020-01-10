@@ -39,11 +39,13 @@ public class ConnectorController {
 	private DataAssetManager dataAssetManager;
 	private DataSourceManager dataSourceManager;
 	private DataSourceAdapterService dataSourceAdapterService;
+    private FileUploadController fileUploadController;
 
 	public ConnectorController(Vertx vertx){
 		this.idsService = new IDSService(vertx);
 		this.dataAssetManager = new DataAssetManager(vertx);
 		this.dataSourceManager = new DataSourceManager(vertx);
+		this.fileUploadController = new FileUploadController(vertx);
 		this.dataSourceAdapterService = DataSourceAdapterService.createProxy(vertx, Constants.DATASOURCEADAPTER_SERVICE);
 		Json.prettyMapper.setSerializationInclusion(JsonInclude.Include.NON_NULL);
 	}
@@ -113,23 +115,7 @@ public class ConnectorController {
 		}
 		getPayload(id, FileType.MULTIPART, resultHandler);
 	}
-	private void addToZipFile(List<String> myList, ZipOutputStream zipOut) throws IOException {
-		for (String filePath : myList){
-			File input = new File(filePath.trim());
-			FileInputStream fis = new FileInputStream(input);
-			ZipEntry ze = new ZipEntry(input.getName());
-			zipOut.putNextEntry(ze);
-			byte[] tmp = new byte[4*1024];
-			int size;
-			while((size = fis.read(tmp)) != -1){
-				zipOut.write(tmp, 0, size);
-			}
-			zipOut.flush();
-			fis.close();
-		}
-		zipOut.close();
 
-	}
 	private void getPayload(Long id, FileType fileType, Handler<AsyncResult<File>> resultHandler) {
 		dataSourceManager.findByType("File Upload",jsonObjectAsyncResult -> {
 			if (jsonObjectAsyncResult.succeeded()){
@@ -139,28 +125,7 @@ public class ConnectorController {
 					if (reply.succeeded()) {
 						DataAsset dataAsset = Json.decodeValue(reply.result().toString(), DataAsset.class);
 						if (dataAsset.getSourceID().equals(dataSourceFileUpload.getId())) {
-							String getFiles = dataAsset.getUrl();
-							String replace = getFiles.replace("[","");
-							String replace1 = replace.replace("]","");
-							List<String> myList = Arrays.asList(replace1.split(","));
-							if (myList.size()>1){
-								String tempName = "test.zip";
-								File file = new File(tempName);
-								FileOutputStream fos ;
-								ZipOutputStream zipOut ;
-								try {
-									fos = new FileOutputStream(tempName);
-									zipOut = new ZipOutputStream(new BufferedOutputStream(fos));
-									addToZipFile(myList,zipOut);
-								} catch (IOException e) {
-									e.printStackTrace();
-								}
-
-								resultHandler.handle(Future.succeededFuture(file));
-							}else {
-								File file = new File(myList.get(0));
-								resultHandler.handle(Future.succeededFuture(file));
-							}
+                            fileUploadController.getFileUpload(resultHandler,dataAsset);
 						}
 						else {
 							dataSourceManager.findById(dataAsset.getSourceID(), reply2 -> {
