@@ -20,8 +20,11 @@ import io.vertx.core.logging.LoggerFactory;
 import io.vertx.ext.web.FileUpload;
 import io.vertx.ext.web.RoutingContext;
 import org.apache.commons.io.FileUtils;
+import org.apache.commons.io.FilenameUtils;
 
 import java.io.*;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
 import java.util.*;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
@@ -110,14 +113,17 @@ public class FileUploadController {
         }else {
             String singleFile = myList.get(0);
             File file = new File(singleFile);
-            File tempFile = file;
-            if (!tempFile.exists()) {
-                try {
-                    tempFile.createNewFile();
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
+
+            String baseName = FilenameUtils.getBaseName(singleFile);
+            String extension = FilenameUtils.getExtension(singleFile);
+            File tempFile = null;
+            try {
+                tempFile = File.createTempFile(baseName,"."+extension);
+                Files.copy(file.toPath(),tempFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
+            } catch (IOException e) {
+                e.printStackTrace();
             }
+
             resultHandler.handle(Future.succeededFuture(tempFile));
         }
     }
