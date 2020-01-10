@@ -113,18 +113,22 @@ public class FileUploadController {
         }else {
             String singleFile = myList.get(0);
             File file = new File(singleFile);
-
+            File parent = new File(System.getProperty("java.io.tmpdir"));
             String baseName = FilenameUtils.getBaseName(singleFile);
             String extension = FilenameUtils.getExtension(singleFile);
-            File tempFile = null;
-            try {
-                tempFile = File.createTempFile(baseName,"."+extension);
-                Files.copy(file.toPath(),tempFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
-            } catch (IOException e) {
-                e.printStackTrace();
+            File temp = new File(parent, baseName+"."+extension);
+
+            if (temp.exists()) {
+                temp.delete();
             }
 
-            resultHandler.handle(Future.succeededFuture(tempFile));
+            try {
+                temp.createNewFile();
+                Files.copy(file.toPath(),temp.toPath(), StandardCopyOption.REPLACE_EXISTING);
+            } catch (IOException ex) {
+                ex.printStackTrace();
+            }
+            resultHandler.handle(Future.succeededFuture(temp));
         }
     }
 }
