@@ -1,4 +1,3 @@
-
 cache:
   paths:
     - .m2/repository
@@ -13,7 +12,7 @@ build:
     - dind
   image: maven:3.6.0-jdk-11-slim
   script:
-    - mvn -f ./pom.xml $MAVEN_CLI_OPTS clean package -U -DskipTests mvn
+    - mvn -f ./pom.xml $MAVEN_CLI_OPTS clean package -U -DskipTests
   only:
     - master
   artifacts:
