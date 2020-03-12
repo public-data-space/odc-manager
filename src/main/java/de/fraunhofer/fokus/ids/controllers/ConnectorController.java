@@ -8,11 +8,11 @@ import de.fraunhofer.fokus.ids.persistence.entities.DataAsset;
 import de.fraunhofer.fokus.ids.persistence.entities.DataSource;
 import de.fraunhofer.fokus.ids.persistence.managers.DataAssetManager;
 import de.fraunhofer.fokus.ids.persistence.managers.DataSourceManager;
+import de.fraunhofer.fokus.ids.persistence.util.MessageTypeEnum;
+import de.fraunhofer.fokus.ids.services.IDSMessageParser;
 import de.fraunhofer.fokus.ids.services.IDSService;
 import de.fraunhofer.fokus.ids.services.datasourceAdapter.DataSourceAdapterService;
-import de.fraunhofer.iais.eis.ArtifactResponseMessage;
-import de.fraunhofer.iais.eis.Connector;
-import de.fraunhofer.iais.eis.SelfDescriptionResponse;
+import de.fraunhofer.iais.eis.*;
 import io.vertx.core.*;
 import io.vertx.core.json.Json;
 import io.vertx.core.json.JsonObject;
@@ -25,6 +25,7 @@ import org.apache.http.entity.mime.content.ContentBody;
 import org.apache.http.entity.mime.content.StringBody;
 
 import java.io.*;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 
 /**
@@ -46,26 +47,15 @@ public class ConnectorController {
 		Json.prettyMapper.setSerializationInclusion(JsonInclude.Include.NON_NULL);
 	}
 
-
-	public void data(long id, String extension, Handler<AsyncResult<HttpEntity>> resultHandler){
-
-		Future<ArtifactResponseMessage> artifactResponseFuture = Future.future();
-		Future<File> fileFuture = Future.future();
-		idsService.getArtifactResponse(artifactResponseFuture.completer());
-		payload(id, extension, fileFuture.completer());
-		CompositeFuture.all(artifactResponseFuture, fileFuture).setHandler( reply -> {
-			if(reply.succeeded()) {
-				MultipartEntityBuilder multipartEntityBuilder = MultipartEntityBuilder.create()
-						.setBoundary("IDSMSGPART")
-						.addTextBody("header", Json.encodePrettily(artifactResponseFuture.result()), ContentType.APPLICATION_JSON)
-						.addBinaryBody("payload", fileFuture.result());
-
-				resultHandler.handle(Future.succeededFuture(multipartEntityBuilder.build()));
-			}
-			else{
-				LOGGER.error("Could not create response.");
-			}
-		});
+	public void data(String input , long id, String extension, Handler<AsyncResult<HttpEntity>> resultHandler){
+		Message header = getHeader(input , resultHandler);
+		if (header instanceof ArtifactResponseMessage) {
+			Future<ArtifactResponseMessage> artifactResponseFuture = Future.future();
+			idsService.handlingArtifactReponse(input,artifactResponseFuture.completer());
+			Future<File> fileFuture = Future.future();
+			payload(id, extension, fileFuture.completer());
+			idsService.messageHandling(header.getId(),artifactResponseFuture,fileFuture,resultHandler);
+		}
 	}
 
 	public void payload(long id, String extension, Handler<AsyncResult<File>> resultHandler) {
@@ -88,31 +78,37 @@ public class ConnectorController {
 		}
 	}
 
-	public void multiPartAbout(Handler<AsyncResult<HttpEntity>> resultHandler) {
-		Future<Connector> connectorFuture = Future.future();
-		idsService.getConnector(connectorFuture.completer());
-		Future<SelfDescriptionResponse> responseFuture = Future.future();
-		idsService.getSelfDescriptionResponse(responseFuture.completer());
-
-		CompositeFuture.all(connectorFuture,responseFuture).setHandler( reply -> {
-			if (reply.succeeded()) {
-				ContentBody cb = new StringBody(Json.encodePrettily(responseFuture.result()), ContentType.create("application/json"));
-				ContentBody result = new StringBody(Json.encodePrettily(connectorFuture.result()), ContentType.create("application/json"));
-
-				MultipartEntityBuilder multipartEntityBuilder = MultipartEntityBuilder.create()
-						.setBoundary("IDSMSGPART")
-						.setCharset(StandardCharsets.UTF_8)
-						.setContentType(ContentType.APPLICATION_JSON)
-						.addPart("header", cb)
-						.addPart("payload", result);
-
-				resultHandler.handle(Future.succeededFuture(multipartEntityBuilder.build()));
+	private Message getHeader(String input,Handler<AsyncResult<HttpEntity>> resultHandler){
+		Message header = IDSMessageParser.getHeader(input);
+		if (header == null) {
+			try {
+				idsService.handleRejectionMessage(new URI(String.valueOf(RejectionReason.MALFORMED_MESSAGE)), RejectionReason.MALFORMED_MESSAGE, resultHandler);
+			} catch (Exception e) {
+				e.printStackTrace();
 			}
-			else {
-				LOGGER.error("Connector Object could not be retrieved.",reply.cause());
-				resultHandler.handle(Future.failedFuture(reply.cause()));
-			}
-		});
+		}
+		return header;
+	}
+
+	public void message(MessageTypeEnum type,String input , long id, String extension, Handler<AsyncResult<HttpEntity>> resultHandler){
+		if (type.equals(MessageTypeEnum.ABOUT)) {
+			multiPartAbout(input,resultHandler);
+
+		}if (type.equals(MessageTypeEnum.DATA)){
+			data(input,id,extension,resultHandler);
+		}
+
+	}
+
+	public void multiPartAbout(String input , Handler<AsyncResult<HttpEntity>> resultHandler) {
+		Message header = getHeader(input , resultHandler);
+		if (header instanceof  SelfDescriptionRequest) {
+			Future<Connector> connectorFuture = Future.future();
+			idsService.getConnector(connectorFuture.completer());
+			Future<SelfDescriptionResponse> responseFuture = Future.future();
+			idsService.handlingSelfDescriptionResponse(input,responseFuture.completer());
+			idsService.messageHandling(header.getId(),responseFuture,connectorFuture,resultHandler);
+		}
 	}
 
 	public void about(Handler<AsyncResult<String>> resultHandler) {

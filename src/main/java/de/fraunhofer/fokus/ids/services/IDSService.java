@@ -7,17 +7,27 @@ import de.fraunhofer.fokus.ids.persistence.service.DatabaseService;
 import de.fraunhofer.iais.eis.*;
 import de.fraunhofer.iais.eis.util.PlainLiteral;
 import io.vertx.core.*;
+import io.vertx.core.buffer.Buffer;
 import io.vertx.core.json.Json;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
+import org.apache.http.HttpEntity;
+import org.apache.http.entity.ContentType;
+import org.apache.http.entity.mime.MultipartEntityBuilder;
+import org.apache.http.entity.mime.content.ContentBody;
+import org.apache.http.entity.mime.content.StringBody;
 
 import javax.xml.datatype.DatatypeConfigurationException;
 import javax.xml.datatype.DatatypeFactory;
 import javax.xml.datatype.XMLGregorianCalendar;
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.nio.charset.StandardCharsets;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.*;
@@ -58,6 +68,14 @@ public class IDSService {
 				resultHandler.handle(Future.failedFuture(config.cause()));
 			}
 		});
+	}
+
+	public void handlingArtifactReponse(String input,Handler<AsyncResult<ArtifactResponseMessage>> resultHandler){
+		resultHandler.handle(Future.succeededFuture(buildArtifactResponseMessage(IDSMessageParser.getBody(input))));
+	}
+
+	public void handlingSelfDescriptionResponse(String input,Handler<AsyncResult<SelfDescriptionResponse>> resultHandler){
+		resultHandler.handle(Future.succeededFuture(buildSelfDescriptionResponse(IDSMessageParser.getBody(input))));
 	}
 
 	private ArtifactResponseMessage buildArtifactResponseMessage(JsonObject config) {
@@ -453,4 +471,83 @@ public class IDSService {
 		//TODO: implement DAPS and return real token
 		return "abcdefg12";
 	}
+
+	private void createRejectionMessage(URI uri,RejectionReason rejectionReason,Handler<AsyncResult<RejectionMessage>> resultHandler) {
+		try {
+			String uuid = UUID.randomUUID().toString();
+			RejectionMessage message = new RejectionMessageBuilder(new URI(uuid))
+					._correlationMessage_(uri)
+					._issued_(getDate())
+					._modelVersion_("2.0.0")
+					._issuerConnector_(new URI("URI"))
+					._securityToken_(new DynamicAttributeTokenBuilder()
+							._tokenFormat_(TokenFormat.JWT)
+							._tokenValue_(getJWT())
+							.build())
+					._rejectionReason_(rejectionReason)
+					.build();
+			resultHandler.handle(Future.succeededFuture(message));
+		} catch (URISyntaxException e) {
+			LOGGER.error(e);
+			resultHandler.handle(Future.failedFuture(e));
+		}
+	}
+
+	public void multiPartBuilderForMessage(boolean selfDescription,Object contentBody, Object payload, Handler<AsyncResult<HttpEntity>> resultHandler) {
+		MultipartEntityBuilder multipartEntityBuilder = MultipartEntityBuilder.create()
+				.setBoundary("IDSMSGPART");
+		if (selfDescription) {
+			multipartEntityBuilder.setCharset(StandardCharsets.UTF_8)
+					.setContentType(ContentType.APPLICATION_JSON)
+					.addPart("header", (ContentBody) contentBody)
+					.addPart("payload", (ContentBody) payload);
+		}
+		else{
+			multipartEntityBuilder.setBoundary("IDSMSGPART")
+					.addTextBody("header", (String) contentBody, ContentType.APPLICATION_JSON)
+					.addBinaryBody("payload", (File) payload);
+		}
+			resultHandler.handle(Future.succeededFuture(multipartEntityBuilder.build()));
+	}
+
+	public void messageHandling(URI uri,Future<?> future1,Future<?> future2,Handler<AsyncResult<HttpEntity>> resultHandler){
+		CompositeFuture.all(future1, future2).setHandler( reply -> {
+			if(reply.succeeded()) {
+				if (future1.result() instanceof SelfDescriptionRequest) {
+					multiPartBuilderForMessage(false, Json.encodePrettily(future1.result()), future2.result(), resultHandler);
+				}
+				else{
+					multiPartBuilderForMessage(false, Json.encodePrettily(future1.result()), future2.result(), resultHandler);
+				}
+			}
+			else{
+				handleRejectionMessage(uri,RejectionReason.INTERNAL_RECIPIENT_ERROR,resultHandler);
+				LOGGER.error("Could not create response.");
+			}
+		});
+	}
+
+	public void handleRejectionMessage(URI uri,RejectionReason rejectionReason,Handler<AsyncResult<HttpEntity>> readyHandler) {
+		createRejectionMessage(uri,rejectionReason,rejectionMessageAsyncResult -> {
+			if (rejectionMessageAsyncResult.succeeded()) {
+				HttpEntity reject = createMultipartMessage(rejectionMessageAsyncResult.result());
+				readyHandler.handle(Future.succeededFuture(reject));
+			} else {
+				readyHandler.handle(Future.failedFuture(rejectionMessageAsyncResult.cause()));
+			}
+		});
+	}
+
+	private HttpEntity createMultipartMessage(Message message) {
+		ContentBody cb = new StringBody(Json.encodePrettily(message), org.apache.http.entity.ContentType.create("application/json"));
+
+		MultipartEntityBuilder multipartEntityBuilder = MultipartEntityBuilder.create()
+				.setBoundary("IDSMSGPART")
+				.setCharset(StandardCharsets.UTF_8)
+				.setContentType(ContentType.APPLICATION_JSON)
+				.addPart("header", cb);
+
+			return multipartEntityBuilder.build();
+	}
+
 }

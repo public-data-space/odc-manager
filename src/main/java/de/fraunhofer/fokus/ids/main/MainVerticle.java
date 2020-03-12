@@ -8,6 +8,7 @@ import de.fraunhofer.fokus.ids.persistence.managers.AuthManager;
 import de.fraunhofer.fokus.ids.persistence.managers.BrokerManager;
 import de.fraunhofer.fokus.ids.persistence.managers.ConfigManager;
 import de.fraunhofer.fokus.ids.persistence.service.DatabaseServiceVerticle;
+import de.fraunhofer.fokus.ids.persistence.util.MessageTypeEnum;
 import de.fraunhofer.fokus.ids.services.InitService;
 import de.fraunhofer.fokus.ids.services.datasourceAdapter.DataSourceAdapterServiceVerticle;
 import io.vertx.config.ConfigRetriever;
@@ -159,7 +160,7 @@ public class MainVerticle extends AbstractVerticle{
 						reply(result, routingContext.response())));
 
 		router.post("/about/").handler(routingContext ->
-				connectorController.multiPartAbout(result ->
+				connectorController.message(MessageTypeEnum.ABOUT,routingContext.getBodyAsString(),0,"", result ->
 						replyMessage(result, routingContext.response())));
 
 		router.get("/data/:id.:extension").handler(routingContext ->
@@ -171,7 +172,7 @@ public class MainVerticle extends AbstractVerticle{
 						replyFile(result, routingContext.response())));
 
 		router.post("/data/:id").handler(routingContext ->
-				connectorController.data(Long.parseLong(routingContext.request().getParam("id")), "", result ->
+				connectorController.message(MessageTypeEnum.DATA,routingContext.getBodyAsString(),Long.parseLong(routingContext.request().getParam("id")), "", result ->
 						replyMessage(result, routingContext.response())));
 
 		router.route("/api/*").handler(JWTAuthHandler.create(authManager.getProvider()));
