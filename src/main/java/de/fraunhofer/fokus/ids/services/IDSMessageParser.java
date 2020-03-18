@@ -12,13 +12,13 @@ public class IDSMessageParser {
 
     private static final String SEPARATOR = "--IDSMSGPART";
 
-    public static Message getHeader(String input) {
+    public static JsonObject getHeader(String input) {
         try {
             int beginBody = input.indexOf(SEPARATOR, (SEPARATOR).length() + 1);
             String headerPart = input.substring(0, beginBody);
 
             String header = headerPart.substring(headerPart.indexOf("{"), headerPart.lastIndexOf("}") + 1);
-            return Json.decodeValue(header, Message.class);
+            return new JsonObject(header);
         } catch (Exception e) {
             LOGGER.error(e);
             return null;

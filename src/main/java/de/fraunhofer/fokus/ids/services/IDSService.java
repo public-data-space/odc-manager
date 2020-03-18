@@ -48,7 +48,7 @@ public class IDSService {
 		databaseService = DatabaseService.createProxy(vertx, Constants.DATABASE_SERVICE);
 	}
 
-	public void getSelfDescriptionResponse(Handler<AsyncResult<SelfDescriptionResponse>> resultHandler) {
+	public void getSelfDescriptionResponse(Handler<AsyncResult<DescriptionResponseMessage>> resultHandler) {
 		getConfiguration(config -> {
 			if(config.succeeded()){
 				resultHandler.handle(Future.succeededFuture( buildSelfDescriptionResponse(config.result())));
@@ -74,7 +74,7 @@ public class IDSService {
 		resultHandler.handle(Future.succeededFuture(buildArtifactResponseMessage(IDSMessageParser.getBody(input))));
 	}
 
-	public void handlingSelfDescriptionResponse(String input,Handler<AsyncResult<SelfDescriptionResponse>> resultHandler){
+	public void handlingSelfDescriptionResponse(String input,Handler<AsyncResult<DescriptionResponseMessage>> resultHandler){
 		resultHandler.handle(Future.succeededFuture(buildSelfDescriptionResponse(IDSMessageParser.getBody(input))));
 	}
 
@@ -200,10 +200,10 @@ public class IDSService {
 		});
 	}
 
-	private SelfDescriptionResponse buildSelfDescriptionResponse(JsonObject config){
+	private DescriptionResponseMessage buildSelfDescriptionResponse(JsonObject config){
 
 		try {
-			return new SelfDescriptionResponseBuilder(new URI(config.getString("url") +"#SelfDescriptionResponse"))
+			return new DescriptionResponseMessageBuilder(new URI(config.getString("url") +"#DescriptionResponseMessage"))
 					._issued_(getDate())
 					._issuerConnector_(new URI(config.getString("url")))
 					._modelVersion_(INFO_MODEL_VERSION)
@@ -234,7 +234,7 @@ public class IDSService {
 					._securityProfile_(SecurityProfile.BASE_CONNECTOR_SECURITY_PROFILE)
 					._title_(new ArrayList<>(Arrays.asList(new PlainLiteral(config.getString("title"), ""))))
 
-					._hosts_(new ArrayList<>(Arrays.asList(new HostBuilder()
+					._host_(new ArrayList<>(Arrays.asList(new HostBuilder()
 							._accessUrl_(new URI(config.getString("url")))
 							._protocol_(Protocol.HTTP)
 							.build())));
@@ -497,10 +497,12 @@ public class IDSService {
 		MultipartEntityBuilder multipartEntityBuilder = MultipartEntityBuilder.create()
 				.setBoundary("IDSMSGPART");
 		if (selfDescription) {
+			ContentBody header = new StringBody(Json.encodePrettily(new JsonObject(contentBody.toString())), ContentType.create("application/json"));
+			ContentBody cb = new StringBody(Json.encodePrettily(payload), ContentType.create("application/json"));
 			multipartEntityBuilder.setCharset(StandardCharsets.UTF_8)
 					.setContentType(ContentType.APPLICATION_JSON)
-					.addPart("header", (ContentBody) contentBody)
-					.addPart("payload", (ContentBody) payload);
+					.addPart("header", header)
+					.addPart("payload",cb);
 		}
 		else{
 			multipartEntityBuilder.setBoundary("IDSMSGPART")
@@ -513,8 +515,8 @@ public class IDSService {
 	public void messageHandling(URI uri,Future<?> future1,Future<?> future2,Handler<AsyncResult<HttpEntity>> resultHandler){
 		CompositeFuture.all(future1, future2).setHandler( reply -> {
 			if(reply.succeeded()) {
-				if (future1.result() instanceof SelfDescriptionRequest) {
-					multiPartBuilderForMessage(false, Json.encodePrettily(future1.result()), future2.result(), resultHandler);
+				if (future1.result() instanceof DescriptionResponseMessage) {
+					multiPartBuilderForMessage(true, Json.encodePrettily(future1.result()), future2.result(), resultHandler);
 				}
 				else{
 					multiPartBuilderForMessage(false, Json.encodePrettily(future1.result()), future2.result(), resultHandler);

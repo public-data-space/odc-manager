@@ -26,6 +26,7 @@ import org.apache.http.entity.mime.content.StringBody;
 
 import java.io.*;
 import java.net.URI;
+import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
 
 /**
@@ -79,7 +80,8 @@ public class ConnectorController {
 	}
 
 	private Message getHeader(String input,Handler<AsyncResult<HttpEntity>> resultHandler){
-		Message header = IDSMessageParser.getHeader(input);
+		JsonObject jsonObject = IDSMessageParser.getHeader(input);
+		Message header = Json.decodeValue(jsonObject.toString(),Message.class);
 		if (header == null) {
 			try {
 				idsService.handleRejectionMessage(new URI(String.valueOf(RejectionReason.MALFORMED_MESSAGE)), RejectionReason.MALFORMED_MESSAGE, resultHandler);
@@ -102,12 +104,24 @@ public class ConnectorController {
 
 	public void multiPartAbout(String input , Handler<AsyncResult<HttpEntity>> resultHandler) {
 		Message header = getHeader(input , resultHandler);
-		if (header instanceof  SelfDescriptionRequest) {
-			Future<Connector> connectorFuture = Future.future();
-			idsService.getConnector(connectorFuture.completer());
-			Future<SelfDescriptionResponse> responseFuture = Future.future();
-			idsService.handlingSelfDescriptionResponse(input,responseFuture.completer());
-			idsService.messageHandling(header.getId(),responseFuture,connectorFuture,resultHandler);
+		if (header instanceof  DescriptionRequestMessage) {
+			JsonObject jsonObject = IDSMessageParser.getHeader(input);
+
+			if (jsonObject.containsKey("requestedElement")) {
+				try {
+					idsService.handleRejectionMessage(new URI(String.valueOf(header.getId())), RejectionReason.METHOD_NOT_SUPPORTED, resultHandler);
+				} catch (URISyntaxException e) {
+					e.printStackTrace();
+				}
+			}
+			else {
+				Future<Connector> connectorFuture = Future.future();
+				idsService.getConnector(connectorFuture.completer());
+				Future<DescriptionResponseMessage> responseFuture = Future.future();
+				idsService.handlingSelfDescriptionResponse(input,responseFuture.completer());
+				idsService.messageHandling(header.getId(),responseFuture,connectorFuture,resultHandler);
+			}
+
 		}
 	}
 
