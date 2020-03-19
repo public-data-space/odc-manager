@@ -160,11 +160,11 @@ public class MainVerticle extends AbstractVerticle{
 						reply(result, routingContext.response())));
 
 		router.post("/about/").handler(routingContext ->
-				connectorController.message(MessageTypeEnum.ABOUT,routingContext.getBodyAsString(),0,"", result ->
+				connectorController.message(MessageTypeEnum.ABOUT,routingContext.getBodyAsString(),"", result ->
 						replyMessage(result, routingContext.response())));
 
 		router.post("/infrastructure/").handler(routingContext ->
-				connectorController.message(MessageTypeEnum.MESSAGES,routingContext.getBodyAsString(),0,"", result ->
+				connectorController.message(MessageTypeEnum.MESSAGES,routingContext.getBodyAsString(),"", result ->
 						replyMessage(result, routingContext.response())));
 
 		router.get("/data/:id.:extension").handler(routingContext ->
@@ -175,8 +175,8 @@ public class MainVerticle extends AbstractVerticle{
 				connectorController.payload(Long.parseLong(routingContext.request().getParam("id")), "", result ->
 						replyFile(result, routingContext.response())));
 
-		router.post("/data/:id").handler(routingContext ->
-				connectorController.message(MessageTypeEnum.DATA,routingContext.getBodyAsString(),Long.parseLong(routingContext.request().getParam("id")), "", result ->
+		router.post("/data/").handler(routingContext ->
+				connectorController.message(MessageTypeEnum.DATA,routingContext.getBodyAsString(), "", result ->
 						replyMessage(result, routingContext.response())));
 
 		router.route("/api/*").handler(JWTAuthHandler.create(authManager.getProvider()));

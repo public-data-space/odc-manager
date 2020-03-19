@@ -87,25 +87,30 @@ public class ConnectorController {
 		return header;
 	}
 
-	public void message(MessageTypeEnum type,String input , long id, String extension, Handler<AsyncResult<HttpEntity>> resultHandler){
+	public void message(MessageTypeEnum type,String input ,String extension, Handler<AsyncResult<HttpEntity>> resultHandler){
 		Message header = getHeader(input , resultHandler);
-		if (header instanceof ArtifactResponseMessage) {
-			if (type.equals(MessageTypeEnum.DATA)){
-				data(input,header,id,extension,resultHandler);
-			}
-			if (type.equals(MessageTypeEnum.MESSAGES)){
+		if (header instanceof ArtifactRequestMessage) {
+			if (!type.equals(MessageTypeEnum.ABOUT)){
 				URI uri = ((ArtifactRequestMessage) header).getRequestedArtifact();
 				String path = uri.getPath();
 				String idStr = path.substring(path.lastIndexOf('/') + 1);
 				long idArtifact = Long.parseLong(idStr);
 				data(input,header,idArtifact,extension,resultHandler);
 			}
-
+			else {
+				idsService.handleRejectionMessage(header.getId(),RejectionReason.MALFORMED_MESSAGE,resultHandler);
+			}
 		}
-		if (header instanceof  SelfDescriptionRequest) {
-			if (!type.equals(MessageTypeEnum.DATA)) {
+		else if (header instanceof  SelfDescriptionRequest) {
+			if (type.equals(MessageTypeEnum.ABOUT)) {
 				multiPartAbout(input,header,resultHandler);
 			}
+			else {
+				idsService.handleRejectionMessage(header.getId(),RejectionReason.MALFORMED_MESSAGE,resultHandler);
+			}
+		}
+		else {
+			idsService.handleRejectionMessage(header.getId(),RejectionReason.MALFORMED_MESSAGE,resultHandler);
 		}
 	}
 
