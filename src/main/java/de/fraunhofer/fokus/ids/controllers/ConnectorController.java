@@ -47,15 +47,12 @@ public class ConnectorController {
 		Json.prettyMapper.setSerializationInclusion(JsonInclude.Include.NON_NULL);
 	}
 
-	public void data(String input , long id, String extension, Handler<AsyncResult<HttpEntity>> resultHandler){
-		Message header = getHeader(input , resultHandler);
-		if (header instanceof ArtifactResponseMessage) {
+	public void data(String input ,Message header, long id, String extension, Handler<AsyncResult<HttpEntity>> resultHandler){
 			Future<ArtifactResponseMessage> artifactResponseFuture = Future.future();
 			idsService.handlingArtifactReponse(input,artifactResponseFuture.completer());
 			Future<File> fileFuture = Future.future();
 			payload(id, extension, fileFuture.completer());
 			idsService.messageHandling(header.getId(),artifactResponseFuture,fileFuture,resultHandler);
-		}
 	}
 
 	public void payload(long id, String extension, Handler<AsyncResult<File>> resultHandler) {
@@ -91,24 +88,33 @@ public class ConnectorController {
 	}
 
 	public void message(MessageTypeEnum type,String input , long id, String extension, Handler<AsyncResult<HttpEntity>> resultHandler){
-		if (type.equals(MessageTypeEnum.ABOUT)) {
-			multiPartAbout(input,resultHandler);
+		Message header = getHeader(input , resultHandler);
+		if (header instanceof ArtifactResponseMessage) {
+			if (type.equals(MessageTypeEnum.DATA)){
+				data(input,header,id,extension,resultHandler);
+			}
+			if (type.equals(MessageTypeEnum.MESSAGES)){
+				URI uri = ((ArtifactRequestMessage) header).getRequestedArtifact();
+				String path = uri.getPath();
+				String idStr = path.substring(path.lastIndexOf('/') + 1);
+				long idArtifact = Long.parseLong(idStr);
+				data(input,header,idArtifact,extension,resultHandler);
+			}
 
-		}if (type.equals(MessageTypeEnum.DATA)){
-			data(input,id,extension,resultHandler);
 		}
-
+		if (header instanceof  SelfDescriptionRequest) {
+			if (!type.equals(MessageTypeEnum.DATA)) {
+				multiPartAbout(input,header,resultHandler);
+			}
+		}
 	}
 
-	public void multiPartAbout(String input , Handler<AsyncResult<HttpEntity>> resultHandler) {
-		Message header = getHeader(input , resultHandler);
-		if (header instanceof  SelfDescriptionRequest) {
+	public void multiPartAbout(String input ,Message header, Handler<AsyncResult<HttpEntity>> resultHandler) {
 			Future<Connector> connectorFuture = Future.future();
 			idsService.getConnector(connectorFuture.completer());
 			Future<SelfDescriptionResponse> responseFuture = Future.future();
 			idsService.handlingSelfDescriptionResponse(input,responseFuture.completer());
 			idsService.messageHandling(header.getId(),responseFuture,connectorFuture,resultHandler);
-		}
 	}
 
 	public void about(Handler<AsyncResult<String>> resultHandler) {

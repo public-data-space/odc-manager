@@ -163,6 +163,10 @@ public class MainVerticle extends AbstractVerticle{
 				connectorController.message(MessageTypeEnum.ABOUT,routingContext.getBodyAsString(),0,"", result ->
 						replyMessage(result, routingContext.response())));
 
+		router.post("/about/").handler(routingContext ->
+				connectorController.message(MessageTypeEnum.MESSAGES,routingContext.getBodyAsString(),0,"", result ->
+						replyMessage(result, routingContext.response())));
+
 		router.get("/data/:id.:extension").handler(routingContext ->
 				connectorController.payload(Long.parseLong(routingContext.request().getParam("id")), routingContext.request().getParam("extension"), result ->
 						replyFile(result, routingContext.response())));
