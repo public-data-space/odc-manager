@@ -50,7 +50,7 @@ public class ConnectorController {
 		long id = Long.parseLong(idStr);
 
 		Future<ArtifactResponseMessage> artifactResponseFuture = Future.future();
-		idsService.getArtifactResponse(artifactResponseFuture.completer());
+		idsService.getArtifactResponse(header.getId(), artifactResponseFuture.completer());
 		Future<File> fileFuture = Future.future();
 		payload(id, extension, fileFuture.completer());
 		idsService.messageHandling(header.getId(),artifactResponseFuture,fileFuture,resultHandler);
@@ -77,8 +77,7 @@ public class ConnectorController {
 	}
 
 	private Message getHeader(String input,Handler<AsyncResult<HttpEntity>> resultHandler){
-		JsonObject jsonObject = IDSMessageParser.getHeader(input);
-		Message header = Json.decodeValue(jsonObject.toString(),Message.class);
+		Message header = IDSMessageParser.getHeader(input);
 		if (header == null) {
 			try {
 				idsService.handleRejectionMessage(new URI(String.valueOf(RejectionReason.MALFORMED_MESSAGE)), RejectionReason.MALFORMED_MESSAGE, resultHandler);
@@ -92,21 +91,19 @@ public class ConnectorController {
 	public void checkMessage(String input, Class clazz, Handler<AsyncResult<HttpEntity>> resultHandler) {
 		Message header = getHeader(input, resultHandler);
 		if (clazz.isInstance(header)) {
-			routeMessage(input, header, resultHandler);
+			routeMessage(header, resultHandler);
 		} else {
 			idsService.handleRejectionMessage(header.getId(),RejectionReason.MALFORMED_MESSAGE,resultHandler);
 		}
 	}
 
-	private void routeMessage(String input, Message header, Handler<AsyncResult<HttpEntity>> resultHandler){
+	private void routeMessage(Message header, Handler<AsyncResult<HttpEntity>> resultHandler){
 			if (header == null) {
 				idsService.handleRejectionMessage(header.getId(),RejectionReason.MALFORMED_MESSAGE,resultHandler);
 			} else {
-				if (header instanceof SelfDescriptionRequest) {
-					LOGGER.info("SelfDescriptionRequest received.");
+				if (header instanceof DescriptionRequestMessage) {
 					multiPartAbout(header, resultHandler);
 				} else if (header instanceof ArtifactRequestMessage) {
-					LOGGER.info("ArtifactRequestMessage received.");
 					data( header, "", resultHandler);
 				} else {
 					idsService.handleRejectionMessage(header.getId(),RejectionReason.MESSAGE_TYPE_NOT_SUPPORTED,resultHandler);
@@ -115,14 +112,14 @@ public class ConnectorController {
 	}
 
 	public void routeMessage(String input, Handler<AsyncResult<HttpEntity>> resultHandler) {
-		routeMessage(input, IDSMessageParser.getHeader(input), resultHandler);
+		routeMessage(IDSMessageParser.getHeader(input), resultHandler);
 	}
 
 	public void multiPartAbout(Message header, Handler<AsyncResult<HttpEntity>> resultHandler) {
 		Future<Connector> connectorFuture = Future.future();
 		idsService.getConnector(connectorFuture.completer());
-		Future<SelfDescriptionResponse> responseFuture = Future.future();
-		idsService.getSelfDescriptionResponse(responseFuture.completer());
+		Future<DescriptionResponseMessage> responseFuture = Future.future();
+		idsService.getSelfDescriptionResponse(header.getId(), responseFuture.completer());
 		idsService.messageHandling(header.getId(), responseFuture, connectorFuture, resultHandler);
 	}
 

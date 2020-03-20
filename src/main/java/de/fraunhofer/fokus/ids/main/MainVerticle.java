@@ -10,7 +10,7 @@ import de.fraunhofer.fokus.ids.persistence.service.DatabaseServiceVerticle;
 import de.fraunhofer.fokus.ids.services.InitService;
 import de.fraunhofer.fokus.ids.services.datasourceAdapter.DataSourceAdapterServiceVerticle;
 import de.fraunhofer.iais.eis.ArtifactRequestMessage;
-import de.fraunhofer.iais.eis.SelfDescriptionRequest;
+import de.fraunhofer.iais.eis.DescriptionRequestMessage;
 import io.vertx.config.ConfigRetriever;
 import io.vertx.config.ConfigRetrieverOptions;
 import io.vertx.config.ConfigStoreOptions;
@@ -158,7 +158,7 @@ public class MainVerticle extends AbstractVerticle{
 						reply(result, routingContext.response())));
 
 		router.post("/about/").handler(routingContext ->
-				connectorController.checkMessage(routingContext.getBodyAsString(), SelfDescriptionRequest.class, result ->
+				connectorController.checkMessage(routingContext.getBodyAsString(), DescriptionRequestMessage.class, result ->
 						replyMessage(result, routingContext.response())));
 
 		router.post("/infrastructure/").handler(routingContext ->
