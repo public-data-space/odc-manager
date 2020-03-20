@@ -70,14 +70,6 @@ public class IDSService {
 		});
 	}
 
-	public void handlingArtifactReponse(String input,Handler<AsyncResult<ArtifactResponseMessage>> resultHandler){
-		resultHandler.handle(Future.succeededFuture(buildArtifactResponseMessage(IDSMessageParser.getBody(input))));
-	}
-
-	public void handlingSelfDescriptionResponse(String input,Handler<AsyncResult<DescriptionResponseMessage>> resultHandler){
-		resultHandler.handle(Future.succeededFuture(buildSelfDescriptionResponse(IDSMessageParser.getBody(input))));
-	}
-
 	private ArtifactResponseMessage buildArtifactResponseMessage(JsonObject config) {
 		try {
 			return new ArtifactResponseMessageBuilder(new URI(config.getString("url") + "#SelfDescriptionResponse"))
@@ -493,20 +485,18 @@ public class IDSService {
 		}
 	}
 
-	public void multiPartBuilderForMessage(boolean selfDescription,Object contentBody, Object payload, Handler<AsyncResult<HttpEntity>> resultHandler) {
+	public void multiPartBuilderForMessage(boolean selfDescription,String header, Object payload, Handler<AsyncResult<HttpEntity>> resultHandler) {
 		MultipartEntityBuilder multipartEntityBuilder = MultipartEntityBuilder.create()
 				.setBoundary("IDSMSGPART");
 		if (selfDescription) {
-			ContentBody header = new StringBody(Json.encodePrettily(new JsonObject(contentBody.toString())), ContentType.create("application/json"));
-			ContentBody cb = new StringBody(Json.encodePrettily(payload), ContentType.create("application/json"));
 			multipartEntityBuilder.setCharset(StandardCharsets.UTF_8)
 					.setContentType(ContentType.APPLICATION_JSON)
-					.addPart("header", header)
-					.addPart("payload",cb);
+					.addPart("header", new StringBody(header, org.apache.http.entity.ContentType.create("application/json")))
+					.addPart("payload",new StringBody(Json.encodePrettily(payload), org.apache.http.entity.ContentType.create("application/json")));
 		}
 		else{
 			multipartEntityBuilder.setBoundary("IDSMSGPART")
-					.addTextBody("header", (String) contentBody, ContentType.APPLICATION_JSON)
+					.addTextBody("header", header)
 					.addBinaryBody("payload", (File) payload);
 		}
 			resultHandler.handle(Future.succeededFuture(multipartEntityBuilder.build()));
@@ -524,18 +514,18 @@ public class IDSService {
 			}
 			else{
 				handleRejectionMessage(uri,RejectionReason.INTERNAL_RECIPIENT_ERROR,resultHandler);
-				LOGGER.error("Could not create response.");
+				LOGGER.error(reply.cause());
 			}
 		});
 	}
 
-	public void handleRejectionMessage(URI uri,RejectionReason rejectionReason,Handler<AsyncResult<HttpEntity>> readyHandler) {
+	public void handleRejectionMessage(URI uri,RejectionReason rejectionReason,Handler<AsyncResult<HttpEntity>> resultHandler) {
 		createRejectionMessage(uri,rejectionReason,rejectionMessageAsyncResult -> {
 			if (rejectionMessageAsyncResult.succeeded()) {
 				HttpEntity reject = createMultipartMessage(rejectionMessageAsyncResult.result());
-				readyHandler.handle(Future.succeededFuture(reject));
+				resultHandler.handle(Future.succeededFuture(reject));
 			} else {
-				readyHandler.handle(Future.failedFuture(rejectionMessageAsyncResult.cause()));
+				resultHandler.handle(Future.failedFuture(rejectionMessageAsyncResult.cause()));
 			}
 		});
 	}
