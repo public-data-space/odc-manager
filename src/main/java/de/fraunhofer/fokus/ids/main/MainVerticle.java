@@ -2,15 +2,15 @@ package de.fraunhofer.fokus.ids.main;
 
 import de.fraunhofer.fokus.ids.controllers.*;
 import de.fraunhofer.fokus.ids.models.DataAssetDescription;
-import de.fraunhofer.fokus.ids.models.ReturnObject;
 import de.fraunhofer.fokus.ids.persistence.entities.DataSource;
 import de.fraunhofer.fokus.ids.persistence.managers.AuthManager;
 import de.fraunhofer.fokus.ids.persistence.managers.BrokerManager;
 import de.fraunhofer.fokus.ids.persistence.managers.ConfigManager;
 import de.fraunhofer.fokus.ids.persistence.service.DatabaseServiceVerticle;
-import de.fraunhofer.fokus.ids.persistence.util.MessageTypeEnum;
 import de.fraunhofer.fokus.ids.services.InitService;
 import de.fraunhofer.fokus.ids.services.datasourceAdapter.DataSourceAdapterServiceVerticle;
+import de.fraunhofer.iais.eis.ArtifactRequestMessage;
+import de.fraunhofer.iais.eis.SelfDescriptionRequest;
 import io.vertx.config.ConfigRetriever;
 import io.vertx.config.ConfigRetrieverOptions;
 import io.vertx.config.ConfigStoreOptions;
@@ -23,14 +23,12 @@ import io.vertx.core.json.Json;
 import io.vertx.core.json.JsonObject;
 import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
-import io.vertx.core.streams.Pump;
 import io.vertx.ext.web.Router;
 import io.vertx.ext.web.handler.BodyHandler;
 import io.vertx.ext.web.handler.CorsHandler;
 import io.vertx.ext.web.handler.JWTAuthHandler;
 import org.apache.http.HttpEntity;
 import org.apache.http.entity.ContentType;
-import org.apache.http.entity.mime.MultipartEntityBuilder;
 
 import java.io.*;
 import java.util.Arrays;
@@ -160,11 +158,11 @@ public class MainVerticle extends AbstractVerticle{
 						reply(result, routingContext.response())));
 
 		router.post("/about/").handler(routingContext ->
-				connectorController.message(MessageTypeEnum.ABOUT,routingContext.getBodyAsString(),"", result ->
+				connectorController.checkMessage(routingContext.getBodyAsString(), SelfDescriptionRequest.class, result ->
 						replyMessage(result, routingContext.response())));
 
 		router.post("/infrastructure/").handler(routingContext ->
-				connectorController.message(MessageTypeEnum.MESSAGES,routingContext.getBodyAsString(),"", result ->
+				connectorController.routeMessage(routingContext.getBodyAsString(), result ->
 						replyMessage(result, routingContext.response())));
 
 		router.get("/data/:id.:extension").handler(routingContext ->
@@ -176,7 +174,7 @@ public class MainVerticle extends AbstractVerticle{
 						replyFile(result, routingContext.response())));
 
 		router.post("/data/").handler(routingContext ->
-				connectorController.message(MessageTypeEnum.DATA,routingContext.getBodyAsString(), "", result ->
+				connectorController.checkMessage(routingContext.getBodyAsString(), ArtifactRequestMessage.class, result ->
 						replyMessage(result, routingContext.response())));
 
 		router.route("/api/*").handler(JWTAuthHandler.create(authManager.getProvider()));

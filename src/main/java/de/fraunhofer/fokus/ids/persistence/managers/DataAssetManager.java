@@ -46,9 +46,13 @@ public class DataAssetManager {
 		dbService.query(FINDBYID_QUERY, new JsonArray(Arrays.asList(id)), reply -> {
 			if (reply.failed()) {
 				LOGGER.error(reply.cause());
-				resultHandler.handle(Future.failedFuture(reply.cause().toString()));
+				resultHandler.handle(Future.failedFuture(reply.cause()));
 			} else {
-				resultHandler.handle(Future.succeededFuture(reply.result().get(0)));
+				if(reply.result().isEmpty()){
+					resultHandler.handle(Future.failedFuture("DataAsset id not in database"));
+				} else {
+					resultHandler.handle(Future.succeededFuture(reply.result().get(0)));
+				}
 			}
 		});
 	}
