@@ -163,44 +163,46 @@ public class ConnectorController {
 
 	private void getPayload(Long id, FileType fileType, Handler<AsyncResult<File>> resultHandler) {
 		dataSourceManager.findByType("File Upload",jsonObjectAsyncResult -> {
-			if (jsonObjectAsyncResult.succeeded()){
-				String dts = jsonObjectAsyncResult.result().toString().replace("[","").replace("]","");
+			if (jsonObjectAsyncResult.succeeded()) {
+				String dts = jsonObjectAsyncResult.result().toString().replace("[", "").replace("]", "");
 				DataSource dataSourceFileUpload = Json.decodeValue(dts, DataSource.class);
 				dataAssetManager.findById(id, reply -> {
 					if (reply.succeeded()) {
 						DataAsset dataAsset = Json.decodeValue(reply.result().toString(), DataAsset.class);
 						if (dataAsset.getSourceID().equals(dataSourceFileUpload.getId())) {
-                            fileUploadController.getFileUpload(resultHandler,dataAsset);
-						}
-						else {
+							fileUploadController.getFileUpload(resultHandler, dataAsset);
+						} else {
 							dataSourceManager.findById(dataAsset.getSourceID(), reply2 -> {
-								if(reply2.succeeded()){
+								if (reply2.succeeded()) {
 									DataSource dataSource = Json.decodeValue(reply2.result().toString(), DataSource.class);
 
-						ResourceRequest request = new ResourceRequest();
-						request.setDataSource(dataSource);
-						request.setDataAsset(dataAsset);
-						request.setFileType(fileType);
+									ResourceRequest request = new ResourceRequest();
+									request.setDataSource(dataSource);
+									request.setDataAsset(dataAsset);
+									request.setFileType(fileType);
 
-						dataSourceAdapterService.getFile(dataSource.getDatasourceType(), new JsonObject(Json.encode(request)), reply3 -> {
-							if(reply3.succeeded()){
-								resultHandler.handle(Future.succeededFuture(new File(reply3.result())));
-							}
-							else{
-								LOGGER.error("FileContent could not be retrieved.",reply3.cause());
-								resultHandler.handle(Future.failedFuture(reply3.cause()));
-							}
-						});
-					}
-					else{
-						LOGGER.error("DataAsset could not be retrieved.",reply2.cause());
-						resultHandler.handle(Future.failedFuture(reply2.cause()));
+									dataSourceAdapterService.getFile(dataSource.getDatasourceType(), new JsonObject(Json.encode(request)), reply3 -> {
+										if (reply3.succeeded()) {
+											resultHandler.handle(Future.succeededFuture(new File(reply3.result())));
+										} else {
+											LOGGER.error("FileContent could not be retrieved.", reply3.cause());
+											resultHandler.handle(Future.failedFuture(reply3.cause()));
+										}
+									});
+								} else {
+									LOGGER.error("DataAsset could not be retrieved.", reply2.cause());
+									resultHandler.handle(Future.failedFuture(reply2.cause()));
+								}
+							});
+						}
+					} else {
+						LOGGER.error(reply.cause());
+						resultHandler.handle(Future.failedFuture(reply.cause()));
 					}
 				});
-			}
-			else {
-				LOGGER.error(reply.cause());
-				resultHandler.handle(Future.failedFuture(reply.cause()));
+			} else {
+			LOGGER.error(jsonObjectAsyncResult.cause());
+			resultHandler.handle(Future.failedFuture(jsonObjectAsyncResult.cause()));
 			}
 		});
 	}
