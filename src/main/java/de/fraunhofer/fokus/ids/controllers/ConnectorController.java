@@ -8,21 +8,25 @@ import de.fraunhofer.fokus.ids.persistence.entities.DataAsset;
 import de.fraunhofer.fokus.ids.persistence.entities.DataSource;
 import de.fraunhofer.fokus.ids.persistence.managers.DataAssetManager;
 import de.fraunhofer.fokus.ids.persistence.managers.DataSourceManager;
+import de.fraunhofer.fokus.ids.services.IDSMessageParser;
 import de.fraunhofer.fokus.ids.services.IDSService;
 import de.fraunhofer.fokus.ids.services.datasourceAdapter.DataSourceAdapterService;
-import de.fraunhofer.iais.eis.Connector;
-import de.fraunhofer.iais.eis.SelfDescriptionResponse;
+import de.fraunhofer.iais.eis.*;
 import io.vertx.core.*;
 import io.vertx.core.json.Json;
 import io.vertx.core.json.JsonObject;
 import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
+import org.apache.http.HttpEntity;
 import org.apache.http.entity.ContentType;
 import org.apache.http.entity.mime.MultipartEntityBuilder;
 import org.apache.http.entity.mime.content.ContentBody;
 import org.apache.http.entity.mime.content.StringBody;
 
 import java.io.*;
+import java.io.*;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicReference;
@@ -50,7 +54,31 @@ public class ConnectorController {
 		Json.prettyMapper.setSerializationInclusion(JsonInclude.Include.NON_NULL);
 	}
 
-	public void data(long id, String extension, Handler<AsyncResult<File>> resultHandler) {
+	public void data(Message header, String extension, Handler<AsyncResult<HttpEntity>> resultHandler){
+		URI uri = ((ArtifactRequestMessage) header).getRequestedArtifact();
+		String path = uri.getPath();
+		String idStr = path.substring(path.lastIndexOf('/') + 1);
+		long id = Long.parseLong(idStr);
+
+		Future<ArtifactResponseMessage> artifactResponseFuture = Future.future();
+		idsService.getArtifactResponse(header.getId(), artifactResponseFuture.completer());
+		Future<File> fileFuture = Future.future();
+		payload(id, extension, fileFuture.completer());
+		idsService.messageHandling(header.getId(),artifactResponseFuture,fileFuture,resultHandler);
+	}
+
+	public void payload(long id, String extension, Handler<AsyncResult<File>> resultHandler) {
+		buildDataAssetReturn(id, extension, reply -> {
+			if(reply.succeeded()){
+				resultHandler.handle(Future.succeededFuture(reply.result()));
+			}
+			else{
+				resultHandler.handle(Future.failedFuture(reply.cause()));
+			}
+		});
+	}
+
+	private void buildDataAssetReturn(long id, String extension, Handler<AsyncResult<File>> resultHandler){
 		if(extension == null) {
 			payload(id, resultHandler);
 		}
@@ -59,41 +87,58 @@ public class ConnectorController {
 		}
 	}
 
-	public void about(String extension, Handler<AsyncResult<ReturnObject>> resultHandler) {
-		FileType type;
-		try{
-			type = FileType.valueOf(extension.toUpperCase());
+	private Message getHeader(String input,Handler<AsyncResult<HttpEntity>> resultHandler){
+		Message header = IDSMessageParser.getHeader(input);
+		if (header == null) {
+			try {
+				idsService.handleRejectionMessage(new URI(String.valueOf(RejectionReason.MALFORMED_MESSAGE)), RejectionReason.MALFORMED_MESSAGE, resultHandler);
+			} catch (Exception e) {
+				e.printStackTrace();
+			}
 		}
-		catch(Exception e){
-			type = FileType.TTL;
-		}
-		String contentType = getContentType(type);
+		return header;
+	}
 
+	public void checkMessage(String input, Class clazz, Handler<AsyncResult<HttpEntity>> resultHandler) {
+		Message header = getHeader(input, resultHandler);
+		if (clazz.isInstance(header)) {
+			routeMessage(header, resultHandler);
+		} else {
+			idsService.handleRejectionMessage(header.getId(),RejectionReason.MALFORMED_MESSAGE,resultHandler);
+		}
+	}
+
+	private void routeMessage(Message header, Handler<AsyncResult<HttpEntity>> resultHandler){
+			if (header == null) {
+				idsService.handleRejectionMessage(header.getId(),RejectionReason.MALFORMED_MESSAGE,resultHandler);
+			} else {
+				if (header instanceof DescriptionRequestMessage) {
+					multiPartAbout(header, resultHandler);
+				} else if (header instanceof ArtifactRequestMessage) {
+					data( header, "", resultHandler);
+				} else {
+					idsService.handleRejectionMessage(header.getId(),RejectionReason.MESSAGE_TYPE_NOT_SUPPORTED,resultHandler);
+				}
+			}
+	}
+
+	public void routeMessage(String input, Handler<AsyncResult<HttpEntity>> resultHandler) {
+		routeMessage(IDSMessageParser.getHeader(input), resultHandler);
+	}
+
+	public void multiPartAbout(Message header, Handler<AsyncResult<HttpEntity>> resultHandler) {
 		Future<Connector> connectorFuture = Future.future();
 		idsService.getConnector(connectorFuture.completer());
-		Future<SelfDescriptionResponse> responseFuture = Future.future();
-		idsService.getSelfDescriptionResponse(responseFuture.completer());
+		Future<DescriptionResponseMessage> responseFuture = Future.future();
+		idsService.getSelfDescriptionResponse(header.getId(), responseFuture.completer());
+		idsService.messageHandling(header.getId(), responseFuture, connectorFuture, resultHandler);
+	}
 
-		CompositeFuture.all(connectorFuture,responseFuture).setHandler( reply -> {
+	public void about(Handler<AsyncResult<String>> resultHandler) {
+
+		idsService.getConnector( reply -> {
 			if (reply.succeeded()) {
-				ContentBody cb = new StringBody(Json.encodePrettily(responseFuture.result()), ContentType.create("application/json"));
-				ContentBody result = new StringBody(Json.encodePrettily(connectorFuture.result()), ContentType.create("application/json"));
-
-				MultipartEntityBuilder multipartEntityBuilder = MultipartEntityBuilder.create()
-						.setBoundary("IDSMSGPART")
-						.setCharset(StandardCharsets.UTF_8)
-						.setContentType(ContentType.APPLICATION_JSON)
-						.addPart("header", cb)
-						.addPart("payload", result);
-
-				ByteArrayOutputStream out = new ByteArrayOutputStream();
-				try {
-					multipartEntityBuilder.build().writeTo(out);
-				} catch (IOException e) {
-					LOGGER.error(e);
-					resultHandler.handle(Future.failedFuture(e.getMessage()));
-				}
-				resultHandler.handle(Future.succeededFuture(new ReturnObject(out.toString(), contentType)));
+				resultHandler.handle(Future.succeededFuture(Json.encodePrettily(reply.result())));
 			}
 			else {
 				LOGGER.error("Connector Object could not be retrieved.",reply.cause());
@@ -132,41 +177,32 @@ public class ConnectorController {
 								if(reply2.succeeded()){
 									DataSource dataSource = Json.decodeValue(reply2.result().toString(), DataSource.class);
 
-									ResourceRequest request = new ResourceRequest();
-									request.setDataSource(dataSource);
-									request.setDataAsset(dataAsset);
-									request.setFileType(fileType);
+						ResourceRequest request = new ResourceRequest();
+						request.setDataSource(dataSource);
+						request.setDataAsset(dataAsset);
+						request.setFileType(fileType);
 
-									dataSourceAdapterService.getFile(dataSource.getDatasourceType(), new JsonObject(Json.encode(request)), reply3 -> {
-										if(reply3.succeeded()){
-											resultHandler.handle(Future.succeededFuture(new File(reply3.result())));
-										}
-										else{
-											LOGGER.error("FileContent could not be retrieved.",reply3.cause());
-											resultHandler.handle(Future.failedFuture(reply3.cause()));
-										}
-									});
-								}
-								else{
-									LOGGER.error("DataAsset could not be retrieved.",reply2.cause());
-									resultHandler.handle(Future.failedFuture(reply2.cause()));
-								}
-							});
-						}
-
+						dataSourceAdapterService.getFile(dataSource.getDatasourceType(), new JsonObject(Json.encode(request)), reply3 -> {
+							if(reply3.succeeded()){
+								resultHandler.handle(Future.succeededFuture(new File(reply3.result())));
+							}
+							else{
+								LOGGER.error("FileContent could not be retrieved.",reply3.cause());
+								resultHandler.handle(Future.failedFuture(reply3.cause()));
+							}
+						});
 					}
-					else {
-						LOGGER.error("DataAsset could not be read.",reply.cause());
-						resultHandler.handle(Future.failedFuture(reply.cause()));
+					else{
+						LOGGER.error("DataAsset could not be retrieved.",reply2.cause());
+						resultHandler.handle(Future.failedFuture(reply2.cause()));
 					}
 				});
 			}
 			else {
-				LOGGER.error("Error ",jsonObjectAsyncResult.cause());
-				resultHandler.handle(Future.failedFuture(jsonObjectAsyncResult.cause()));
+				LOGGER.error(reply.cause());
+				resultHandler.handle(Future.failedFuture(reply.cause()));
 			}
 		});
-
 	}
 
 	private String getContentType(FileType fileType) {

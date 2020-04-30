@@ -24,12 +24,13 @@ public class DataSourceAdapterServiceImpl implements DataSourceAdapterService {
     private int configManagerPort;
     private String configManagerHost;
     private Vertx vertx;
-    private String tempFileRootPath = "";
+    private String tempFileRootPath;
 
     public DataSourceAdapterServiceImpl(Vertx vertx, WebClient webClient, int gatewayPort, String gatewayHost, String tempFileRootPath, Handler<AsyncResult<DataSourceAdapterService>> readyHandler) {
         this.webClient = webClient;
         this.configManagerHost = gatewayHost;
         this.configManagerPort = gatewayPort;
+        this.tempFileRootPath = tempFileRootPath;
         this.vertx = vertx;
 
         readyHandler.handle(Future.succeededFuture(this));
