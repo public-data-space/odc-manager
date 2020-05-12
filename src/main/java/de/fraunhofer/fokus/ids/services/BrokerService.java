@@ -1,7 +1,9 @@
 package de.fraunhofer.fokus.ids.services;
 
+import de.fraunhofer.fokus.ids.models.IDSMessage;
 import de.fraunhofer.fokus.ids.persistence.managers.BrokerManager;
 import de.fraunhofer.iais.eis.*;
+import de.fraunhofer.iais.eis.ids.jsonld.Serializer;
 import io.vertx.core.*;
 import io.vertx.core.buffer.Buffer;
 import io.vertx.core.json.Json;
@@ -21,6 +23,8 @@ import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
+
 /**
  * @author Vincent Bohlen, vincent.bohlen@fokus.fraunhofer.de
  */
@@ -31,11 +35,13 @@ public class BrokerService {
     private BrokerManager brokerManager;
     private IDSService idsService;
     private WebClient webClient;
+    private Serializer serializer;
 
     public BrokerService(Vertx vertx){
         this.brokerManager = new BrokerManager(vertx);
         this.idsService = new IDSService(vertx);
         this.webClient = WebClient.create(vertx);
+        this.serializer = new Serializer();
     }
 
     public void subscribe(String url, Handler<AsyncResult<Void>> resultHandler){
@@ -118,6 +124,12 @@ public class BrokerService {
                         .post(port, host, path)
                         .sendBuffer(buffer, ar -> {
                             if (ar.succeeded()) {
+                                Optional<IDSMessage> answer = IDSMessageParser.parse(ar.result().bodyAsString());
+                                if(answer.isPresent() && answer.get().getHeader().isPresent()){
+                                    if(answer.get().getHeader().get() instanceof RejectionMessage){
+                                        resultHandler.handle(Future.failedFuture(((RejectionMessage) answer.get().getHeader().get()).getRejectionReason().toString()));
+                                    }
+                                }
                                 resultHandler.handle(Future.succeededFuture());
                             } else {
                                 LOGGER.error(ar.cause());
@@ -152,21 +164,22 @@ public class BrokerService {
     }
 
    private Buffer createBrokerMessage(ConnectorNotificationMessage message, Connector connector){
-       ContentBody cb = new StringBody(Json.encodePrettily(message), org.apache.http.entity.ContentType.create("application/json"));
-       ContentBody result = new StringBody(Json.encodePrettily(connector), org.apache.http.entity.ContentType.create("application/json"));
 
-       MultipartEntityBuilder multipartEntityBuilder = MultipartEntityBuilder.create()
-               .setBoundary("IDSMSGPART")
-               .setCharset(StandardCharsets.UTF_8)
-               .setContentType(ContentType.APPLICATION_JSON)
-               .addPart("header", cb)
-               .addPart("payload", result);
+       try{
+           ContentBody cb = new StringBody(serializer.serialize(message), org.apache.http.entity.ContentType.create("application/json"));
+           ContentBody result = new StringBody(serializer.serialize(connector), org.apache.http.entity.ContentType.create("application/json"));
 
-       ByteArrayOutputStream out = new ByteArrayOutputStream();
-       try {
+           MultipartEntityBuilder multipartEntityBuilder = MultipartEntityBuilder.create()
+                   .setBoundary("msgpart")
+                   .setCharset(StandardCharsets.UTF_8)
+                   .setContentType(ContentType.APPLICATION_JSON)
+                   .addPart("header", cb)
+                   .addPart("payload", result);
+
+           ByteArrayOutputStream out = new ByteArrayOutputStream();
            multipartEntityBuilder.build().writeTo(out);
            return Buffer.buffer().appendString(out.toString());
-       } catch (IOException e) {
+       } catch (Exception e){
            LOGGER.error(e);
        }
        return null;

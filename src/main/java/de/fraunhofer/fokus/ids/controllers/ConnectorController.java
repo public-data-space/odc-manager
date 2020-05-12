@@ -88,7 +88,7 @@ public class ConnectorController {
 	}
 
 	private Message getHeader(String input,Handler<AsyncResult<HttpEntity>> resultHandler){
-		Message header = IDSMessageParser.getHeader(input);
+		Message header = IDSMessageParser.parse(input).get().getHeader().get();
 		if (header == null) {
 			try {
 				idsService.handleRejectionMessage(new URI(String.valueOf(RejectionReason.MALFORMED_MESSAGE)), RejectionReason.MALFORMED_MESSAGE, resultHandler);
@@ -123,7 +123,7 @@ public class ConnectorController {
 	}
 
 	public void routeMessage(String input, Handler<AsyncResult<HttpEntity>> resultHandler) {
-		routeMessage(IDSMessageParser.getHeader(input), resultHandler);
+		routeMessage(IDSMessageParser.parse(input).get().getHeader().get(), resultHandler);
 	}
 
 	public void multiPartAbout(Message header, Handler<AsyncResult<HttpEntity>> resultHandler) {

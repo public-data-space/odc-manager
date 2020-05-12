@@ -1,38 +1,46 @@
 package de.fraunhofer.fokus.ids.services;
 
+import de.fraunhofer.fokus.ids.models.IDSMessage;
 import de.fraunhofer.iais.eis.Message;
-import io.vertx.core.json.Json;
-import io.vertx.core.json.JsonObject;
+import de.fraunhofer.iais.eis.ids.jsonld.Serializer;
 import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
+import org.apache.commons.io.IOUtils;
+import org.eclipse.jetty.http.MultiPartFormInputStream;
+
+import javax.servlet.http.Part;
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.Charset;
+import java.util.Optional;
 
 public class IDSMessageParser {
     private static Logger LOGGER = LoggerFactory.getLogger(IDSMessageParser.class.getName());
+    private static final String SEPARATOR = "msgpart";
+    private static Serializer serializer = new Serializer();
 
-    private static final String SEPARATOR = "--IDSMSGPART";
+    public static Optional<IDSMessage> parse(String requestMessage){
 
-    public static Message getHeader(String input) {
+        InputStream messageBodyStream = new ByteArrayInputStream(requestMessage.getBytes(Charset.defaultCharset()));
+
+        MultiPartFormInputStream multiPartInputStream = new MultiPartFormInputStream(messageBodyStream, "multipart/form-data; boundary="+SEPARATOR, null, null);
         try {
-            int beginBody = input.indexOf(SEPARATOR, (SEPARATOR).length() + 1);
-            String headerPart = input.substring(0, beginBody);
+            Part header = multiPartInputStream.getPart("header");
+            Part payload = multiPartInputStream.getPart("payload");
+            String payloadString = "";
+            String headerString = "";
 
-            String header = headerPart.substring(headerPart.indexOf("{"), headerPart.lastIndexOf("}") + 1);
-            return Json.decodeValue(header, Message.class);
-        } catch (Exception e) {
+            if(header != null) {
+                headerString = IOUtils.toString(multiPartInputStream.getPart("header").getInputStream(), Charset.defaultCharset());
+            }
+            if(payload != null) {
+                payloadString = IOUtils.toString(multiPartInputStream.getPart("payload").getInputStream(), Charset.defaultCharset());
+            }
+            return Optional.of(new IDSMessage(serializer.deserialize(headerString, Message.class), payloadString));
+        } catch (IOException e) {
             LOGGER.error(e);
-            return null;
         }
-    }
-
-    public static JsonObject getBody(String input) {
-        try {
-            int beginBody = input.indexOf(SEPARATOR, (SEPARATOR).length() + 1);
-            String bodyPart = input.substring(beginBody);
-            String body = bodyPart.substring(bodyPart.indexOf("{"), bodyPart.lastIndexOf("}") + 1);
-            return new JsonObject(body);
-        } catch (Exception e) {
-            LOGGER.error(e);
-            return null;
-        }
+        return Optional.empty();
     }
 }

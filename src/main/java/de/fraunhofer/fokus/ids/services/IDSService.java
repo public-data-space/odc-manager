@@ -495,7 +495,7 @@ public class IDSService {
 
 	public void multiPartBuilderForMessage(boolean selfDescription,String header, Object payload, Handler<AsyncResult<HttpEntity>> resultHandler) {
 		MultipartEntityBuilder multipartEntityBuilder = MultipartEntityBuilder.create()
-				.setBoundary("IDSMSGPART");
+				.setBoundary("msgpart");
 		if (selfDescription) {
 			multipartEntityBuilder.setCharset(StandardCharsets.UTF_8)
 					.setContentType(ContentType.APPLICATION_JSON)
@@ -503,7 +503,7 @@ public class IDSService {
 					.addPart("payload",new StringBody(Json.encodePrettily(payload), org.apache.http.entity.ContentType.create("application/json")));
 		}
 		else{
-			multipartEntityBuilder.setBoundary("IDSMSGPART")
+			multipartEntityBuilder.setBoundary("msgpart")
 					.addTextBody("header", header)
 					.addBinaryBody("payload", (File) payload);
 		}
@@ -542,7 +542,7 @@ public class IDSService {
 		ContentBody cb = new StringBody(Json.encodePrettily(message), org.apache.http.entity.ContentType.create("application/json"));
 
 		MultipartEntityBuilder multipartEntityBuilder = MultipartEntityBuilder.create()
-				.setBoundary("IDSMSGPART")
+				.setBoundary("msgpart")
 				.setCharset(StandardCharsets.UTF_8)
 				.setContentType(ContentType.APPLICATION_JSON)
 				.addPart("header", cb);
