@@ -34,7 +34,7 @@ public class InitService{
 	private final String DATASOURCE_TABLE_CREATE_QUERY = "CREATE TABLE IF NOT EXISTS datasource (id SERIAL, created_at TIMESTAMP, updated_at TIMESTAMP, datasourcename TEXT, data JSONB, datasourcetype TEXT)";
 	private final String JOB_TABLE_CREATE_QUERY = "CREATE TABLE IF NOT EXISTS job (id SERIAL, created_at TIMESTAMP, updated_at TIMESTAMP, data JSONB, status INTEGER, sourceid BIGINT, sourcetype TEXT)";
 	private final String BROKER_TABLE_CREATE_QUERY = "CREATE TABLE IF NOT EXISTS broker (id SERIAL, created_at TIMESTAMP, updated_at TIMESTAMP, url TEXT, status TEXT)";
-	private final String CONFIGURATION_TABLE_CREATE_QUERY = "CREATE TABLE IF NOT EXISTS configuration (id SERIAL, url TEXT, maintainer TEXT, curator TEXT, title TEXT)";
+	private final String CONFIGURATION_TABLE_CREATE_QUERY = "CREATE TABLE IF NOT EXISTS configuration (id SERIAL, country TEXT, url TEXT, maintainer TEXT, curator TEXT, title TEXT)";
 
 	public InitService(Vertx vertx){
 		this.databaseService = DatabaseService.createProxy(vertx, Constants.DATABASE_SERVICE);

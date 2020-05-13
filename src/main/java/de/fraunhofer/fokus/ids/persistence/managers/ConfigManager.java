@@ -43,12 +43,12 @@ public class ConfigManager {
                 .add(json.getString("title"))
                 .add(json.getString("maintainer"))
                 .add(json.getString("curator"))
-                .add(json.getString("url"));
-
+                .add(json.getString("url"))
+                .add(json.getString("country"));
         getConfiguration(reply -> {
             if(reply.succeeded()){
                 params.add(reply.result().getLong("id"));
-                dbService.query("UPDATE configuration SET title = ?, maintainer = ?, curator = ?, url = ? WHERE id = ?", params, reply2 -> {
+                dbService.query("UPDATE configuration SET title = ?, maintainer = ?, curator = ?, url = ?, country = ? WHERE id = ?", params, reply2 -> {
                     if(reply2.succeeded()){
                         JsonObject jO = new JsonObject();
                         jO.put("status", "success");
@@ -61,7 +61,7 @@ public class ConfigManager {
                     }
                 });
             } else{
-                dbService.query("INSERT INTO configuration (title, maintainer, curator, url) values (?,?,?,?)", params, reply2 -> {
+                dbService.query("INSERT INTO configuration (title, maintainer, curator, url, country) values (?,?,?,?,?)", params, reply2 -> {
                     if(reply2.succeeded()){
                         JsonObject jO = new JsonObject();
                         jO.put("status", "success");
