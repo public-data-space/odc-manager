@@ -215,9 +215,15 @@ public class DataAssetController {
 		dataAssetManager.changeStatus(DataAssetStatus.PUBLISHED, id, reply -> {
 			JsonObject jO = new JsonObject();
 			if (reply.succeeded()) {
-				jO.put("success", "Data Asset " + id + " wurde veröffentlicht.");
-				resultHandler.handle(Future.succeededFuture(jO));
-				brokerController.update();
+				brokerController.update(reply2 -> {
+				    if(reply2.succeeded()){
+                        jO.put("success", "Data Asset " + id + " wurde veröffentlicht.");
+                        resultHandler.handle(Future.succeededFuture(jO));
+                    } else {
+                        LOGGER.error(reply.cause());
+                        resultHandler.handle(Future.failedFuture(reply.cause()));
+                    }
+                });
 			}
 			else {
 				LOGGER.error(reply.cause());
@@ -230,9 +236,15 @@ public class DataAssetController {
 		dataAssetManager.changeStatus(DataAssetStatus.APPROVED, id, reply -> {
 			JsonObject jO = new JsonObject();
 			if (reply.succeeded()) {
-				jO.put("success", "Data Asset " + id + " wurde zurückgehalten.");
-				resultHandler.handle(Future.succeededFuture(jO));
-				brokerController.update();
+                brokerController.update(reply2 -> {
+                    if(reply2.succeeded()){
+                        jO.put("success", "Data Asset " + id + " wurde zurückgehalten.");
+                        resultHandler.handle(Future.succeededFuture(jO));
+                    } else {
+                        LOGGER.error(reply.cause());
+                        resultHandler.handle(Future.failedFuture(reply.cause()));
+                    }
+                });
 			}
 			else {
 				LOGGER.error(reply.cause());
@@ -256,11 +268,19 @@ public class DataAssetController {
 
 						CompositeFuture.all(databaseDeleteFuture, serviceDeleteFuture).setHandler( ar -> {
 							if(ar.succeeded()){
-								JsonObject jO = new JsonObject();
-								jO.put("status", "success");
-								jO.put("text", "Data Asset " + id + " wurde gelöscht.");
-								resultHandler.handle(Future.succeededFuture(jO));
-								brokerController.update();
+								brokerController.update(reply -> {
+								    if(reply.succeeded()){
+                                        JsonObject jO = new JsonObject();
+                                        jO.put("status", "success");
+                                        jO.put("text", "Data Asset " + id + " wurde gelöscht.");
+                                        resultHandler.handle(Future.succeededFuture(jO));
+                                    } else {
+                                        JsonObject jO = new JsonObject();
+                                        jO.put("status", "info");
+                                        jO.put("text", "Data Asset " + id + " wurde gelöscht, konnte aber beim Broker nicht entfernt werden.");
+                                        resultHandler.handle(Future.succeededFuture(jO));
+                                    }
+                                });
 							} else {
 								LOGGER.error("Delete Future could not be completed.", ar.cause());
 								resultHandler.handle(Future.failedFuture(ar.cause()));
