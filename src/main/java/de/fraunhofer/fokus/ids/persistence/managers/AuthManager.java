@@ -33,7 +33,7 @@ public class AuthManager {
         provider = JWTAuth.create(vertx, new JWTAuthOptions()
                 .addPubSecKey(new PubSecKeyOptions()
                         .setAlgorithm("HS256")
-                        .setPublicKey("keyboard cat")
+                        .setPublicKey("478f66d6ab103ddb45d4f37fb9ee4d34")
                         .setSymmetric(true)));
 
     }
@@ -53,7 +53,7 @@ public class AuthManager {
                     User user = Json.decodeValue(reply.result().get(0).toString(), User.class);
 
                     if (BCrypt.checkpw(credentials.getString("password"), user.getPassword())) {
-                        resultHandler.handle(Future.succeededFuture(provider.generateToken(new JsonObject().put("sub", user.getUsername()), new JWTOptions().setExpiresInMinutes(60))));
+                        resultHandler.handle(Future.succeededFuture(provider.generateToken(new JsonObject().put("sub", user.getUsername()), new JWTOptions().setExpiresInMinutes(24*60))));
                     } else {
                         resultHandler.handle(Future.failedFuture("Password is not identical to password in database."));
                     }
