@@ -7,6 +7,7 @@ import io.vertx.codegen.annotations.VertxGen;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Handler;
 import io.vertx.core.Vertx;
+import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.client.WebClient;
 /**
@@ -21,6 +22,9 @@ public interface DataSourceAdapterService {
 
     @Fluent
     DataSourceAdapterService supported(String dataSourceType, Handler<AsyncResult<JsonObject>> resultHandler);
+
+    @Fluent
+    DataSourceAdapterService listAdapters(Handler<AsyncResult<JsonArray>> resultHandler);
 
     @Fluent
     DataSourceAdapterService delete(String dataSourceType, Long id, Handler<AsyncResult<JsonObject>> resultHandler);

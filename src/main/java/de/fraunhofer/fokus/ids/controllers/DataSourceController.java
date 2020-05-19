@@ -68,6 +68,17 @@ public class DataSourceController {
         }
     }
 
+    public void listAdapters(Handler<AsyncResult<JsonArray>> resultHandler){
+        dataSourceAdapterService.listAdapters(jsonArrayAsyncResult -> {
+           if (jsonArrayAsyncResult.succeeded()){
+               resultHandler.handle(Future.succeededFuture(jsonArrayAsyncResult.result()));
+           }
+           else {
+               resultHandler.handle(Future.failedFuture(jsonArrayAsyncResult.cause()));
+           }
+        });
+    }
+
     public void delete(Long id, Handler<AsyncResult<JsonObject>> resultHandler) {
         dataSourceManager.delete(id, reply -> {
             if(reply.succeeded()) {

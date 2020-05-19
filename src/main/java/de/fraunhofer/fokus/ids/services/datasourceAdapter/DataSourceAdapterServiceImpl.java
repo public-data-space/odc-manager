@@ -6,6 +6,7 @@ import io.vertx.core.Handler;
 import io.vertx.core.Vertx;
 import io.vertx.core.file.AsyncFile;
 import io.vertx.core.file.OpenOptions;
+import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
@@ -117,6 +118,21 @@ public class DataSourceAdapterServiceImpl implements DataSourceAdapterService {
                 resultHandler.handle(Future.failedFuture(reply.cause()));
             }
         });
+        return this;
+    }
+
+    @Override
+    public DataSourceAdapterService listAdapters(Handler<AsyncResult<JsonArray>> resultHandler) {
+        webClient
+                .get(configManagerPort, configManagerHost, "/listAdapters/")
+                .send(ar -> {
+                    if (ar.succeeded()) {
+                        resultHandler.handle(Future.succeededFuture(ar.result().bodyAsJsonArray()));
+                    } else {
+                        LOGGER.error(ar.cause());
+                        resultHandler.handle(Future.failedFuture(ar.cause()));
+                    }
+                });
         return this;
     }
 
