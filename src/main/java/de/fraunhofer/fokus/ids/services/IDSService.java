@@ -216,7 +216,7 @@ public class IDSService {
 					._maintainer_(new URI(config.getString("maintainer")))
 					._version_("0.0.1")
 					._curator_(new URI(config.getString("curator")))
-					._physicalLocation_(new GeoPointBuilder(new URI(config.getString("country"))).build())
+					._physicalLocation_(new GeoFeatureBuilder(new URI(config.getString("country"))).build())
 					._outboundModelVersion_(INFO_MODEL_VERSION)
 					._inboundModelVersion_(new ArrayList<>(Arrays.asList(SUPPORTED_INFO_MODEL_VERSIONS)))
 
