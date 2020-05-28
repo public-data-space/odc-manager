@@ -76,7 +76,7 @@ public class DataAssetController {
         });
     }
 
-    public void add(DataAssetDescription dataAssetDescription, Handler<AsyncResult<JsonObject>> resultHandler) {
+    public void add(DataAssetDescription dataAssetDescription, String licenceurl, String licencetitle, Handler<AsyncResult<JsonObject>> resultHandler) {
         if (dataAssetDescription.getData().isEmpty()) {
             JsonObject jO = new JsonObject();
             jO.put("status", "error");
@@ -89,7 +89,7 @@ public class DataAssetController {
                     LOGGER.info("Starting Job with ID: " + jobId);
                     jobManager.updateStatus(jobId, JobStatus.RUNNING, statusUpdateReply -> {
                     });
-                    initiateDataAssetCreation(da -> createDataAsset(jobId, da), dataAssetDescription);
+                    initiateDataAssetCreation(da -> createDataAsset(jobId, da, licenceurl, licencetitle), dataAssetDescription);
                     JsonObject jO = new JsonObject();
                     jO.put("status", "success");
                     jO.put("text", "Job wurde erstellt!");
@@ -194,8 +194,13 @@ public class DataAssetController {
         });
     }
 
-	private void createDataAsset(long jobId, AsyncResult<DataAsset> res) {
+	private void createDataAsset(long jobId, AsyncResult<DataAsset> res, String licenceurl, String licencetitle) {
 		if (res.succeeded()) {
+		    DataAsset dataAsset = res.result();
+		    if(dataAsset.getLicenseUrl() == null){
+		        dataAsset.setLicenseUrl(licenceurl);
+		        dataAsset.setLicenseTitle(licencetitle);
+            }
 			LOGGER.info("DataAsset was successfully created.");
 			dataAssetManager.add(new JsonObject(Json.encode(res.result())), reply -> {
 				if (reply.succeeded()) {
