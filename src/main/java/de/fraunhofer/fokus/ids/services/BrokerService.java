@@ -50,18 +50,61 @@ public class BrokerService {
         idsService.getConnector(connectorFuture);
         idsService.createRegistrationMessage(messageFuture);
 
+        sendSingle(url, connectorFuture, messageFuture, resultHandler);
+    }
+
+    public void subscribeAll(Handler<AsyncResult<Void>> resultHandler){
+        Future<Connector> connectorFuture = Future.future();
+        Future<ConnectorAvailableMessage> messageFuture = Future.future();
+        idsService.getConnector(connectorFuture);
+        idsService.createRegistrationMessage(messageFuture);
+
+        sendMulti(connectorFuture, messageFuture, resultHandler);
+    }
+
+    public void unsubscribeAll(Handler<AsyncResult<Void>> resultHandler){
+        Future<Connector> connectorFuture = Future.future();
+        Future<ConnectorUnavailableMessage> messageFuture = Future.future();
+        idsService.getConnector(connectorFuture);
+        idsService.createUnregistrationMessage(messageFuture);
+
+        sendMulti(connectorFuture, messageFuture, resultHandler);
+    }
+
+    private void sendSingle(String url, Future<Connector> connectorFuture, Future messageFuture, Handler<AsyncResult<Void>> resultHandler){
         CompositeFuture.all(connectorFuture, messageFuture).setHandler(reply -> {
             if(reply.succeeded()) {
                 List<URL> urls = new ArrayList<>();
                 try {
                     urls.add(new URL(url));
-                    sendMessage(createBrokerMessage(messageFuture.result(), connectorFuture.result()), urls, resultHandler);
+                    sendMessage(createBrokerMessage((ConnectorNotificationMessage) messageFuture.result(), connectorFuture.result()), urls, resultHandler);
                 } catch (MalformedURLException e) {
                     LOGGER.error(e);
                     resultHandler.handle(Future.failedFuture(e));
                 }
             }
             else{
+                LOGGER.error(reply.cause());
+                resultHandler.handle(Future.failedFuture(reply.cause()));
+            }
+        });
+    }
+
+    private void sendMulti(Future<Connector> connectorFuture, Future messageFuture, Handler<AsyncResult<Void>> resultHandler){
+        CompositeFuture.all(connectorFuture, messageFuture).setHandler(reply -> {
+            if(reply.succeeded()){
+                getBrokerURLs(reply2 -> {
+                    if (reply2.succeeded()) {
+                        sendMessage(createBrokerMessage((ConnectorNotificationMessage) messageFuture.result(), connectorFuture.result()), reply2.result(), resultHandler);
+                    }
+                    else{
+                        LOGGER.error(reply2.cause());
+                        resultHandler.handle(Future.failedFuture(reply2.cause()));
+                    }
+                });
+            }
+            else{
+                LOGGER.error(reply.cause());
                 resultHandler.handle(Future.failedFuture(reply.cause()));
             }
         });
@@ -73,21 +116,7 @@ public class BrokerService {
         idsService.getConnector(connectorFuture);
         idsService.createUnregistrationMessage(messageFuture);
 
-        CompositeFuture.all(connectorFuture, messageFuture).setHandler(reply -> {
-            if(reply.succeeded()) {
-                List<URL> urls = new ArrayList<>();
-                try {
-                    urls.add(new URL(url));
-                    sendMessage(createBrokerMessage(messageFuture.result(), connectorFuture.result()), urls, resultHandler);
-                } catch (MalformedURLException e) {
-                    LOGGER.error(e);
-                    resultHandler.handle(Future.failedFuture(e));
-                }
-            }
-            else{
-                resultHandler.handle(Future.failedFuture(reply.cause()));
-            }
-        });
+        sendSingle(url, connectorFuture, messageFuture, resultHandler);
     }
 
     public void update(Handler<AsyncResult<Void>> resultHandler){
@@ -96,49 +125,43 @@ public class BrokerService {
         idsService.getConnector(connectorFuture);
         idsService.createUpdateMessage(messageFuture);
 
-        CompositeFuture.all(connectorFuture, messageFuture).setHandler(reply -> {
-            if(reply.succeeded()){
-                getBrokerURLs(reply2 -> {
-                    if (reply2.succeeded()) {
-                        sendMessage(createBrokerMessage(messageFuture.result(), connectorFuture.result()), reply2.result(), resultHandler);
-                    }
-                    else{
-                        resultHandler.handle(Future.failedFuture(reply2.cause()));
-                    }
-                });
-            }
-            else{
-                resultHandler.handle(Future.failedFuture(reply.cause()));
-            }
-        });
+        sendMulti(connectorFuture, messageFuture, resultHandler);
     }
 
     private void sendMessage(Buffer buffer, List<URL> urls, Handler<AsyncResult<Void>> resultHandler){
         if(buffer != null) {
-            for (URL url : urls) {
-                final int port = url.getPort() == -1 ? 80 : url.getPort();
-                final String host = url.getHost();
-                final String path = url.getPath();
+            if(urls.isEmpty()){
+                resultHandler.handle(Future.succeededFuture());
+            } else {
+                for (URL url : urls) {
+                    final int port = url.getPort() == -1 ? 80 : url.getPort();
+                    final String host = url.getHost();
+                    final String path = url.getPath();
 
-                webClient
-                        .post(port, host, path)
-                        .sendBuffer(buffer, ar -> {
-                            if (ar.succeeded()) {
-                                Optional<IDSMessage> answer = IDSMessageParser.parse(ar.result().bodyAsString());
-                                if(answer.isPresent() && answer.get().getHeader().isPresent()){
-                                    if(answer.get().getHeader().get() instanceof RejectionMessage){
-                                        resultHandler.handle(Future.failedFuture(((RejectionMessage) answer.get().getHeader().get()).getRejectionReason().toString()));
+                    webClient
+                            .post(port, host, path)
+                            .sendBuffer(buffer, ar -> {
+                                if (ar.succeeded()) {
+                                    Optional<IDSMessage> answer = IDSMessageParser.parse(ar.result().bodyAsString());
+                                    if (answer.isPresent() && answer.get().getHeader().isPresent()) {
+                                        if (answer.get().getHeader().get() instanceof RejectionMessage) {
+                                            resultHandler.handle(Future.failedFuture(((RejectionMessage) answer.get().getHeader().get()).getRejectionReason().toString()));
+                                        } else {
+                                            resultHandler.handle(Future.succeededFuture());
+                                        }
+                                    } else {
+                                        resultHandler.handle(Future.succeededFuture());
                                     }
+                                } else {
+                                    LOGGER.error(ar.cause());
+                                    resultHandler.handle(Future.failedFuture(ar.cause()));
                                 }
-                                resultHandler.handle(Future.succeededFuture());
-                            } else {
-                                LOGGER.error(ar.cause());
-                                resultHandler.handle(Future.failedFuture(ar.cause()));
-                            }
-                        });
+                            });
+                }
             }
         }
         else{
+            LOGGER.error("Message could not be created.");
             resultHandler.handle(Future.failedFuture("Message could not be created."));
         }
     }
@@ -152,7 +175,7 @@ public class BrokerService {
                         brokerUrls.add(new URL(reply.result().getJsonObject(i).getString("url")));
                     } catch (MalformedURLException e) {
                         LOGGER.error(e);
-                        resultHandler.handle(Future.succeededFuture(new ArrayList<>()));
+                        break;
                     }
                 }
                 resultHandler.handle(Future.succeededFuture(brokerUrls));

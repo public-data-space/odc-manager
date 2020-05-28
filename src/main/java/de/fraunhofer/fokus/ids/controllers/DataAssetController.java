@@ -5,7 +5,6 @@ import de.fraunhofer.fokus.ids.models.Constants;
 import de.fraunhofer.fokus.ids.models.DataAssetDescription;
 import de.fraunhofer.fokus.ids.persistence.entities.DataAsset;
 import de.fraunhofer.fokus.ids.persistence.entities.DataSource;
-import de.fraunhofer.fokus.ids.persistence.entities.Job;
 import de.fraunhofer.fokus.ids.persistence.enums.DataAssetStatus;
 import de.fraunhofer.fokus.ids.persistence.enums.JobStatus;
 import de.fraunhofer.fokus.ids.persistence.managers.DataAssetManager;
@@ -19,6 +18,9 @@ import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
+
+import java.util.ArrayList;
+
 /**
  * @author Vincent Bohlen, vincent.bohlen@fokus.fraunhofer.de
  */
@@ -211,13 +213,85 @@ public class DataAssetController {
 	}
 
 
+	public void publishAll(Handler<AsyncResult<JsonObject>> resultHandler) {
+        dataAssetManager.findAll(reply -> {
+            if (reply.succeeded()) {
+                ArrayList<Future> publishFutures = new ArrayList<>();
+                for (int i = 0; i < reply.result().size(); i++) {
+                    DataAsset da = Json.decodeValue(reply.result().getJsonObject(i).toString(), DataAsset.class);
+                    Future f = Future.future();
+                    dataAssetManager.changeStatus(DataAssetStatus.PUBLISHED, da.getId(), f.completer());
+                }
+                CompositeFuture.all(publishFutures).setHandler(reply2 -> {
+                    if (reply2.succeeded()) {
+                        brokerController.update(reply3 -> {
+                            if (reply3.succeeded()) {
+                                JsonObject jO = new JsonObject();
+                                jO.put("success", "Data Assets wurden veröffentlicht.");
+                                resultHandler.handle(Future.succeededFuture(jO));
+                            } else {
+                                LOGGER.error(reply3.cause());
+                                resultHandler.handle(Future.failedFuture(reply3.cause()));
+                            }
+                        });
+                    } else {
+                        LOGGER.error(reply2.cause());
+                        resultHandler.handle(Future.failedFuture(reply.cause()));
+                    }
+                });
+            } else {
+                LOGGER.error(reply.cause());
+                resultHandler.handle(Future.failedFuture(reply.cause()));
+            }
+        });
+    }
+
+    public void unpublishAll(Handler<AsyncResult<JsonObject>> resultHandler) {
+        dataAssetManager.findAll(reply -> {
+            if (reply.succeeded()) {
+                ArrayList<Future> publishFutures = new ArrayList<>();
+                for (int i = 0; i < reply.result().size(); i++) {
+                    DataAsset da = Json.decodeValue(reply.result().getJsonObject(i).toString(), DataAsset.class);
+                    Future f = Future.future();
+                    dataAssetManager.changeStatus(DataAssetStatus.APPROVED, da.getId(), f.completer());
+                }
+                CompositeFuture.all(publishFutures).setHandler(reply2 -> {
+                    if (reply2.succeeded()) {
+                        brokerController.update(reply3 -> {
+                            if (reply3.succeeded()) {
+                                JsonObject jO = new JsonObject();
+                                jO.put("success", "Data Assets wurden zurückgehalten.");
+                                resultHandler.handle(Future.succeededFuture(jO));
+                            } else {
+                                LOGGER.error(reply3.cause());
+                                resultHandler.handle(Future.failedFuture(reply3.cause()));
+                            }
+                        });
+                    } else {
+                        LOGGER.error(reply2.cause());
+                        resultHandler.handle(Future.failedFuture(reply.cause()));
+                    }
+                });
+            } else {
+                LOGGER.error(reply.cause());
+                resultHandler.handle(Future.failedFuture(reply.cause()));
+            }
+        });
+    }
+
 	public void publish(Long id, Handler<AsyncResult<JsonObject>> resultHandler) {
 		dataAssetManager.changeStatus(DataAssetStatus.PUBLISHED, id, reply -> {
 			JsonObject jO = new JsonObject();
 			if (reply.succeeded()) {
-				jO.put("success", "Data Asset " + id + " wurde veröffentlicht.");
-				resultHandler.handle(Future.succeededFuture(jO));
-				brokerController.update();
+				brokerController.update(reply2 -> {
+				    if(reply2.succeeded()){
+                        jO.put("success", "Data Asset " + id + " wurde veröffentlicht.");
+                        resultHandler.handle(Future.succeededFuture(jO));
+                    } else {
+                        LOGGER.error(reply.cause());
+                        resultHandler.handle(Future.failedFuture(reply.cause()));
+                    }
+                });
 			}
 			else {
 				LOGGER.error(reply.cause());
@@ -230,9 +304,15 @@ public class DataAssetController {
 		dataAssetManager.changeStatus(DataAssetStatus.APPROVED, id, reply -> {
 			JsonObject jO = new JsonObject();
 			if (reply.succeeded()) {
-				jO.put("success", "Data Asset " + id + " wurde zurückgehalten.");
-				resultHandler.handle(Future.succeededFuture(jO));
-				brokerController.update();
+                brokerController.update(reply2 -> {
+                    if(reply2.succeeded()){
+                        jO.put("success", "Data Asset " + id + " wurde zurückgehalten.");
+                        resultHandler.handle(Future.succeededFuture(jO));
+                    } else {
+                        LOGGER.error(reply.cause());
+                        resultHandler.handle(Future.failedFuture(reply.cause()));
+                    }
+                });
 			}
 			else {
 				LOGGER.error(reply.cause());
@@ -256,11 +336,19 @@ public class DataAssetController {
 
 						CompositeFuture.all(databaseDeleteFuture, serviceDeleteFuture).setHandler( ar -> {
 							if(ar.succeeded()){
-								JsonObject jO = new JsonObject();
-								jO.put("status", "success");
-								jO.put("text", "Data Asset " + id + " wurde gelöscht.");
-								resultHandler.handle(Future.succeededFuture(jO));
-								brokerController.update();
+								brokerController.update(reply -> {
+								    if(reply.succeeded()){
+                                        JsonObject jO = new JsonObject();
+                                        jO.put("status", "success");
+                                        jO.put("text", "Data Asset " + id + " wurde gelöscht.");
+                                        resultHandler.handle(Future.succeededFuture(jO));
+                                    } else {
+                                        JsonObject jO = new JsonObject();
+                                        jO.put("status", "info");
+                                        jO.put("text", "Data Asset " + id + " wurde gelöscht, konnte aber beim Broker nicht entfernt werden.");
+                                        resultHandler.handle(Future.succeededFuture(jO));
+                                    }
+                                });
 							} else {
 								LOGGER.error("Delete Future could not be completed.", ar.cause());
 								resultHandler.handle(Future.failedFuture(ar.cause()));
