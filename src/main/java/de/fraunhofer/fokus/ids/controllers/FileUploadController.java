@@ -83,12 +83,14 @@ public class FileUploadController {
             {
                 put("datasettitle", data.getString("datasettitle"));
                 put("datasetnotes", data.getString("datasetnotes"));
+                put("licenseurl", data.getString("licenseurl"));
+                put("licensetitle", data.getString("licensetitle"));
                 put("file", list.toString());
             }
         };
         dataAssetDescription.setData(map);
         dataAssetDescription.setDatasourcetype("File Upload");
-        dataAssetController.add(dataAssetDescription, "", "", resultHandler);
+        dataAssetController.add(dataAssetDescription, data.getString("licenseurl"), data.getString("licensetitle"), resultHandler);
 
     }
 
