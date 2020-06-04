@@ -83,8 +83,6 @@ public class FileUploadController {
             {
                 put("datasettitle", data.getString("datasettitle"));
                 put("datasetnotes", data.getString("datasetnotes"));
-                put("licenseurl", data.getString("licenseurl"));
-                put("licensetitle", data.getString("licensetitle"));
                 put("file", list.toString());
             }
         };
