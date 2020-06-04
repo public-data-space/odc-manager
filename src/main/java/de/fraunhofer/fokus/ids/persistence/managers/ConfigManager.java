@@ -47,14 +47,14 @@ public class ConfigManager {
                 .add(json.getString("title"))
                 .add(json.getString("maintainer"))
                 .add(json.getString("curator"))
-                .add(json.getString("url"));
-
+                .add(json.getString("url"))
+                .add(json.getString("country"));
         getConfiguration(reply -> {
             if (reply.succeeded()) {
                 brokerService.unsubscribeAll(unsubReply -> {
                     if (unsubReply.succeeded()) {
                         params.add(reply.result().getLong("id"));
-                        dbService.query("UPDATE configuration SET title = ?, maintainer = ?, curator = ?, url = ? WHERE id = ?", params, reply2 -> {
+                        dbService.query("UPDATE configuration SET title = ?, maintainer = ?, curator = ?, url = ?, country = ? WHERE id = ?", params, reply2 -> {
                             if (reply2.succeeded()) {
                                 brokerService.subscribeAll(subReply -> {
                                     if (subReply.succeeded()) {
@@ -83,7 +83,7 @@ public class ConfigManager {
                     }
                 });
             } else {
-                dbService.query("INSERT INTO configuration (title, maintainer, curator, url) values (?,?,?,?)", params, reply3 -> {
+                dbService.query("INSERT INTO configuration (title, maintainer, curator, url, country) values (?,?,?,?, ?)", params, reply3 -> {
                     if (reply3.failed()) {
                         LOGGER.error(reply3.cause());
                         resultHandler.handle(Future.failedFuture(reply3.cause()));

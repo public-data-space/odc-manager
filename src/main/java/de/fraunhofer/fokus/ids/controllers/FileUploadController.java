@@ -88,7 +88,7 @@ public class FileUploadController {
         };
         dataAssetDescription.setData(map);
         dataAssetDescription.setDatasourcetype("File Upload");
-        dataAssetController.add(dataAssetDescription,resultHandler);
+        dataAssetController.add(dataAssetDescription, data.getString("licenseurl"), data.getString("licensetitle"), resultHandler);
 
     }
 
