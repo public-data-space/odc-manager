@@ -27,7 +27,7 @@ public class DockerServiceVerticle extends AbstractVerticle {
 
         retriever.getConfig(ar -> {
             if (ar.succeeded()) {
-                DockerService.create(vertx, webClient, ar.result().getInteger("CONFIG_MANAGER_PORT"), ar.result().getString("CONFIG_MANAGER_HOST"), ar.result().getString("REPOSITORY"), ready -> {
+                DockerService.create(webClient, ar.result().getInteger("CONFIG_MANAGER_PORT"), ar.result().getString("CONFIG_MANAGER_HOST"), ar.result().getString("CONFIG_MANAGER_API_KEY"), ready -> {
                     if (ready.succeeded()) {
                         ServiceBinder binder = new ServiceBinder(vertx);
                         binder

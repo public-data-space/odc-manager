@@ -26,8 +26,8 @@ public interface DockerService {
     DockerService stopImages(String uuid, Handler<AsyncResult<JsonObject>> resultHandler);
 
     @GenIgnore
-    static DockerService create(Vertx vertx, WebClient webClient, int gatewayPort, String gatewayHost, String tempFileRootPath, Handler<AsyncResult<DockerService>> readyHandler) {
-        return new DockerServiceImpl(vertx, webClient, gatewayPort, gatewayHost, tempFileRootPath, readyHandler);
+    static DockerService create(WebClient webClient, int gatewayPort, String gatewayHost, String configManagerApikey, Handler<AsyncResult<DockerService>> readyHandler) {
+        return new DockerServiceImpl(webClient, gatewayPort, gatewayHost, configManagerApikey, readyHandler);
     }
 
     @GenIgnore

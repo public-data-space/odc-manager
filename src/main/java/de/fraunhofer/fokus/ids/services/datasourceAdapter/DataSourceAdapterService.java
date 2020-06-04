@@ -39,8 +39,8 @@ public interface DataSourceAdapterService {
     DataSourceAdapterService getDataSourceFormSchema(String dataSourceType, Handler<AsyncResult<JsonObject>> resultHandler);
 
     @GenIgnore
-    static DataSourceAdapterService create(Vertx vertx, WebClient webClient, int gatewayPort, String gatewayHost, String tempFileRootPath, Handler<AsyncResult<DataSourceAdapterService>> readyHandler) {
-        return new DataSourceAdapterServiceImpl(vertx, webClient, gatewayPort, gatewayHost, tempFileRootPath, readyHandler);
+    static DataSourceAdapterService create(Vertx vertx, WebClient webClient, int gatewayPort, String gatewayHost, String configManagerApikey, String tempFileRootPath, Handler<AsyncResult<DataSourceAdapterService>> readyHandler) {
+        return new DataSourceAdapterServiceImpl(vertx, webClient, gatewayPort, gatewayHost, configManagerApikey, tempFileRootPath, readyHandler);
     }
 
     @GenIgnore

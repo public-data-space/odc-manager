@@ -26,13 +26,15 @@ public class DataSourceAdapterServiceImpl implements DataSourceAdapterService {
     private String configManagerHost;
     private Vertx vertx;
     private String tempFileRootPath;
+    private String configManagerApikey;
 
-    public DataSourceAdapterServiceImpl(Vertx vertx, WebClient webClient, int gatewayPort, String gatewayHost, String tempFileRootPath, Handler<AsyncResult<DataSourceAdapterService>> readyHandler) {
+    public DataSourceAdapterServiceImpl(Vertx vertx, WebClient webClient, int gatewayPort, String gatewayHost, String configManagerApikey, String tempFileRootPath, Handler<AsyncResult<DataSourceAdapterService>> readyHandler) {
         this.webClient = webClient;
         this.configManagerHost = gatewayHost;
         this.configManagerPort = gatewayPort;
         this.tempFileRootPath = tempFileRootPath;
         this.vertx = vertx;
+        this.configManagerApikey = configManagerApikey;
 
         readyHandler.handle(Future.succeededFuture(this));
     }
@@ -125,6 +127,7 @@ public class DataSourceAdapterServiceImpl implements DataSourceAdapterService {
     public DataSourceAdapterService listAdapters(Handler<AsyncResult<JsonArray>> resultHandler) {
         webClient
                 .get(configManagerPort, configManagerHost, "/listAdapters/")
+                .bearerTokenAuthentication(configManagerApikey)
                 .send(ar -> {
                     if (ar.succeeded()) {
                         resultHandler.handle(Future.succeededFuture(ar.result().bodyAsJsonArray()));
