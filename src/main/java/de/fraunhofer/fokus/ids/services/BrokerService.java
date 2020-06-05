@@ -95,9 +95,13 @@ public class BrokerService {
             if(reply.succeeded()){
                 getBrokerURLs(reply2 -> {
                     if (reply2.succeeded()) {
-                        sendMessage(createBrokerMessage((ConnectorNotificationMessage) messageFuture.result(), connectorFuture.result()), reply2.result(), resultHandler);
-                    }
-                    else{
+                        if(!reply2.result().isEmpty()) {
+                            sendMessage(createBrokerMessage((ConnectorNotificationMessage) messageFuture.result(), connectorFuture.result()), reply2.result(), resultHandler);
+                        }
+                        else {
+                            resultHandler.handle(Future.succeededFuture());
+                        }
+                    } else{
                         LOGGER.error(reply2.cause());
                         resultHandler.handle(Future.failedFuture(reply2.cause()));
                     }
