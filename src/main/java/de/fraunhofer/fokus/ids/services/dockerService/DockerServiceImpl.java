@@ -71,6 +71,7 @@ public class DockerServiceImpl implements DockerService {
     public DockerService startImages(String uuid, Handler<AsyncResult<JsonObject>> resultHandler) {
         webClient
                 .post(configManagerPort, configManagerHost, "/images/start/")
+                .bearerTokenAuthentication(configManagerApikey)
                 .sendBuffer(Buffer.buffer(uuid), ar -> {
                     if (ar.succeeded()) {
                         resultHandler.handle(Future.succeededFuture(ar.result().bodyAsJsonObject()));
@@ -86,6 +87,7 @@ public class DockerServiceImpl implements DockerService {
     public DockerService stopImages(String uuid, Handler<AsyncResult<JsonObject>> resultHandler) {
         webClient
                 .post(configManagerPort, configManagerHost, "/images/stop/")
+                .bearerTokenAuthentication(configManagerApikey)
                 .sendBuffer(Buffer.buffer(uuid), ar -> {
                     if (ar.succeeded()) {
                         resultHandler.handle(Future.succeededFuture(ar.result().bodyAsJsonObject()));
