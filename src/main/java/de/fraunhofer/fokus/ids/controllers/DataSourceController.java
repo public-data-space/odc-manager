@@ -3,9 +3,8 @@ package de.fraunhofer.fokus.ids.controllers;
 import de.fraunhofer.fokus.ids.models.Constants;
 import de.fraunhofer.fokus.ids.persistence.entities.DataSource;
 import de.fraunhofer.fokus.ids.persistence.managers.DataSourceManager;
-import de.fraunhofer.fokus.ids.services.datasourceAdapter.DataSourceAdapterService;
+import de.fraunhofer.fokus.ids.services.dockerService.DockerService;
 import io.vertx.core.*;
-import io.vertx.core.json.Json;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.core.logging.Logger;
@@ -17,16 +16,16 @@ public class DataSourceController {
 
     private Logger LOGGER = LoggerFactory.getLogger(DataSourceController.class.getName());
     private DataSourceManager dataSourceManager;
-    private DataSourceAdapterService dataSourceAdapterService;
+    private DockerService dockerService;
 
     public DataSourceController(Vertx vertx){
         this.dataSourceManager = new DataSourceManager(vertx);
-        this.dataSourceAdapterService = DataSourceAdapterService.createProxy(vertx, Constants.DATASOURCEADAPTER_SERVICE);
+        this.dockerService = DockerService.createProxy(vertx, Constants.DOCKER_SERVICE);
     }
 
     public void getFormSchema(String type, Handler<AsyncResult<JsonObject>> resultHandler) {
 
-        dataSourceAdapterService.getDataSourceFormSchema(type, reply2 -> {
+        dockerService.getDataSourceFormSchema(type, reply2 -> {
             if (reply2.succeeded()) {
                 resultHandler.handle(Future.succeededFuture(reply2.result()));
             }
@@ -69,7 +68,7 @@ public class DataSourceController {
     }
 
     public void listAdapters(Handler<AsyncResult<JsonArray>> resultHandler){
-        dataSourceAdapterService.listAdapters(jsonArrayAsyncResult -> {
+        dockerService.listAdapters(jsonArrayAsyncResult -> {
            if (jsonArrayAsyncResult.succeeded()){
                resultHandler.handle(Future.succeededFuture(jsonArrayAsyncResult.result()));
            }
@@ -144,7 +143,7 @@ public class DataSourceController {
         dataSourceManager.findById(id, reply -> {
             if (reply.succeeded()) {
 
-                dataSourceAdapterService.getDataAssetFormSchema(reply.result().getString("datasourcetype"), reply2 -> {
+                dockerService.getDataAssetFormSchema(reply.result().getString("datasourcetype"), reply2 -> {
                     if(reply2.succeeded()){
 
                         JsonObject newjO = new JsonObject()

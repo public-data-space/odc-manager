@@ -24,19 +24,10 @@ public interface DataSourceAdapterService {
     DataSourceAdapterService supported(String dataSourceType, Handler<AsyncResult<JsonObject>> resultHandler);
 
     @Fluent
-    DataSourceAdapterService listAdapters(Handler<AsyncResult<JsonArray>> resultHandler);
-
-    @Fluent
     DataSourceAdapterService delete(String dataSourceType, Long id, Handler<AsyncResult<JsonObject>> resultHandler);
 
     @Fluent
     DataSourceAdapterService createDataAsset(String dataSourceType, JsonObject message, Handler<AsyncResult<JsonObject>> resultHandler);
-
-    @Fluent
-    DataSourceAdapterService getDataAssetFormSchema(String dataSourceType, Handler<AsyncResult<JsonObject>> resultHandler);
-
-    @Fluent
-    DataSourceAdapterService getDataSourceFormSchema(String dataSourceType, Handler<AsyncResult<JsonObject>> resultHandler);
 
     @GenIgnore
     static DataSourceAdapterService create(Vertx vertx, WebClient webClient, int gatewayPort, String gatewayHost, String configManagerApikey, String tempFileRootPath, Handler<AsyncResult<DataSourceAdapterService>> readyHandler) {

@@ -98,4 +98,72 @@ public class DockerServiceImpl implements DockerService {
                 });
         return this;
     }
+
+    @Override
+    public DockerService getDataAssetFormSchema(String dataSourceType, Handler<AsyncResult<JsonObject>> resultHandler) {
+        webClient
+                .get(configManagerPort, configManagerHost, "/getAdapter/"+dataSourceType)
+                .bearerTokenAuthentication(configManagerApikey)
+                .send(reply -> {
+                    if(reply.succeeded()) {
+                        webClient
+                                .get(reply.result().bodyAsJsonObject().getInteger("port"), reply.result().bodyAsJsonObject().getString("host"), "/getDataAssetFormSchema/")
+                                .bearerTokenAuthentication(configManagerApikey)
+                                .send(adapterReply -> {
+                                    if (adapterReply.succeeded()) {
+                                        resultHandler.handle(Future.succeededFuture(adapterReply.result().bodyAsJsonObject()));
+                                    } else {
+                                        LOGGER.error(adapterReply.cause());
+                                        resultHandler.handle(Future.failedFuture(adapterReply.cause()));
+                                    }
+                                });
+                    } else {
+                        LOGGER.error(reply.cause());
+                        resultHandler.handle(Future.failedFuture(reply.cause()));
+                    }
+                });
+        return this;
+    }
+
+    @Override
+    public DockerService getDataSourceFormSchema(String dataSourceType,Handler<AsyncResult<JsonObject>> resultHandler) {
+        webClient
+                .get(configManagerPort, configManagerHost, "/getAdapter/"+dataSourceType)
+                .bearerTokenAuthentication(configManagerApikey)
+                .send(reply -> {
+            if(reply.succeeded()) {
+                webClient
+                        .get(reply.result().bodyAsJsonObject().getInteger("port"), reply.result().bodyAsJsonObject().getString("host"), "/getDataSourceFormSchema/")
+                        .bearerTokenAuthentication(configManagerApikey)
+                        .send(adapterReply -> {
+                            if (adapterReply.succeeded()) {
+                                resultHandler.handle(Future.succeededFuture(adapterReply.result().bodyAsJsonObject()));
+                            } else {
+                                LOGGER.error(adapterReply.cause());
+                                resultHandler.handle(Future.failedFuture(adapterReply.cause()));
+                            }
+                        });
+            } else {
+                LOGGER.error(reply.cause());
+                resultHandler.handle(Future.failedFuture(reply.cause()));
+            }
+        });
+        return this;
+    }
+
+    @Override
+    public DockerService listAdapters(Handler<AsyncResult<JsonArray>> resultHandler) {
+        webClient
+                .get(configManagerPort, configManagerHost, "/listAdapters/")
+                .bearerTokenAuthentication(configManagerApikey)
+                .send(ar -> {
+                    if (ar.succeeded()) {
+                        resultHandler.handle(Future.succeededFuture(ar.result().bodyAsJsonArray()));
+                    } else {
+                        LOGGER.error(ar.cause());
+                        resultHandler.handle(Future.failedFuture(ar.cause()));
+                    }
+                });
+        return this;
+    }
 }
