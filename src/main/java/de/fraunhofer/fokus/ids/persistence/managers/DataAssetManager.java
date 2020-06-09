@@ -35,7 +35,7 @@ public class DataAssetManager {
 	private static final String ADD_UPDATE = "Update DataAsset SET updated_at = NOW(), datasetid = ?, name = ?, url = ?,"
 			+ " format = ?, licenseurl = ?, licensetitle = ?, datasettitle = ?, datasetnotes = ?, orignalresourceurl = ?,"
 			+ " orignaldataseturl = ?, signature = ?, status = ?, resourceid = ?, tags = ?, datasetdescription = ?,"
-			+ " organizationtitle = ?, organizationdescription = ?, version = ?, sourceid = ? WHERE id = ?";
+			+ " organizationtitle = ?, organizationdescription = ?, version = ?, sourceid = ?, filename = ? WHERE id = ?";
 	private static final String DELETE_UPDATE = "DELETE FROM dataasset WHERE id = ?";
 
 	public DataAssetManager(Vertx vertx) {
@@ -166,6 +166,7 @@ public class DataAssetManager {
 				.add(checkNull(dataAsset.getOrganizationDescription()))
 				.add(checkNull(dataAsset.getVersion()))
 				.add(checkNull(dataAsset.getSourceID().toString()))
+				.add(checkNull(dataAsset.getFilename()))
 				.add(dataAsset.getId());
 
 		dbService.update(ADD_UPDATE,params, reply -> {
