@@ -29,12 +29,55 @@ public class InitService{
 
 	private final String ADMIN_CREATE_QUERY = "INSERT INTO public.user(created_at, updated_at, username, password) SELECT NOW(), NOW(), ?, ? WHERE NOT EXISTS ( SELECT 1 FROM public.user WHERE username=?)";
 	private final String DATASOURCEFILEUPLOAD_CREATE_QUERY = "INSERT INTO datasource(created_at, updated_at, datasourcename,data, datasourcetype) SELECT NOW(), NOW(), ?, ? ,? WHERE NOT EXISTS ( SELECT 1 FROM datasource WHERE datasourcetype=?)";
-	private final String USER_TABLE_CREATE_QUERY = "CREATE TABLE IF NOT EXISTS public.user (id SERIAL , created_at TIMESTAMP , updated_at TIMESTAMP , username TEXT, password TEXT)";
-	private final String DATAASSET_TABLE_CREATE_QUERY = "CREATE TABLE IF NOT EXISTS dataasset (id SERIAL, created_at TIMESTAMP, updated_at TIMESTAMP, datasetid TEXT, name TEXT, url TEXT, format TEXT, licenseurl TEXT, licensetitle TEXT, datasettitle TEXT, datasetnotes TEXT, orignalresourceurl TEXT, orignaldataseturl TEXT, signature TEXT, status INTEGER, resourceid TEXT, tags TEXT[] , datasetdescription TEXT, organizationtitle TEXT, organizationdescription TEXT, version TEXT, sourceid TEXT)";
+	private final String USER_TABLE_CREATE_QUERY = "CREATE TABLE IF NOT EXISTS public.user " +
+			"(id SERIAL , created_at TIMESTAMP , updated_at TIMESTAMP , username TEXT, password TEXT)";
+	private final String DATAASSET_TABLE_CREATE_QUERY = "CREATE TABLE IF NOT EXISTS dataasset (id SERIAL, created_at TIMESTAMP, updated_at TIMESTAMP, datasetid TEXT, name TEXT, url TEXT, format TEXT, licenseurl TEXT,licenseurl2 TEXT, licensetitle TEXT, datasettitle TEXT, datasetnotes TEXT, orignalresourceurl TEXT, orignaldataseturl TEXT, signature TEXT, status INTEGER, resourceid TEXT, tags TEXT[] , datasetdescription TEXT, organizationtitle TEXT, organizationdescription TEXT, version TEXT, sourceid TEXT)";
 	private final String DATASOURCE_TABLE_CREATE_QUERY = "CREATE TABLE IF NOT EXISTS datasource (id SERIAL, created_at TIMESTAMP, updated_at TIMESTAMP, datasourcename TEXT, data JSONB, datasourcetype TEXT)";
 	private final String JOB_TABLE_CREATE_QUERY = "CREATE TABLE IF NOT EXISTS job (id SERIAL, created_at TIMESTAMP, updated_at TIMESTAMP, data JSONB, status INTEGER, sourceid BIGINT, sourcetype TEXT)";
 	private final String BROKER_TABLE_CREATE_QUERY = "CREATE TABLE IF NOT EXISTS broker (id SERIAL, created_at TIMESTAMP, updated_at TIMESTAMP, url TEXT, status TEXT)";
 	private final String CONFIGURATION_TABLE_CREATE_QUERY = "CREATE TABLE IF NOT EXISTS configuration (id SERIAL, country TEXT, url TEXT, maintainer TEXT, curator TEXT, title TEXT)";
+
+
+	private final JsonObject user = new JsonObject().put("id","SERIAL")
+			.put("created_at","TIMESTAMP")
+			.put("updated_at","TIMESTAMP")
+			.put("username","TEXT")
+			.put("password","TEXT");
+
+	private final JsonObject dataasset = new JsonObject().put("id","SERIAL").put("created_at","TIMESTAMP")
+			.put("updated_at","TIMESTAMP").put("datasetid","TEXT").put("name","TEXT")
+			.put("url","TEXT").put("format","TEXT").put("licenseurl","TEXT").put("licensetitle","TEXT").put("datasettitle","TEXT")
+			.put("datasetnotes","TEXT").put("orignalresourceurl","TEXT")
+			.put("orignaldataseturl","TEXT").put("signature","TEXT").put("status","INTEGER").put("resourceid","TEXT")
+			.put("tags","TEXT[]").put("datasetdescription","TEXT").put("organizationtitle","TEXT")
+			.put("organizationdescription","TEXT").put("version","TEXT").put("organizationdescription","TEXT")
+			.put("testcolumn3","TEXT")
+			.put("sourceid","TEXT");
+
+	private final JsonObject datasource = new JsonObject().put("id","SERIAL")
+			.put("created_at","TIMESTAMP")
+			.put("updated_at","TIMESTAMP")
+			.put("datasourcename","TEXT")
+			.put("data","JSONB")
+			.put("datasourcetype","TEXT");
+	private final JsonObject job = new JsonObject().put("id","SERIAL")
+			.put("created_at","TIMESTAMP")
+			.put("updated_at","TIMESTAMP")
+			.put("data","JSONB")
+			.put("status","INTEGER")
+			.put("sourceid","BIGINT")
+			.put("sourcetype","TEXT");
+	private final JsonObject broker = new JsonObject().put("id","SERIAL")
+			.put("created_at","TIMESTAMP")
+			.put("updated_at","TIMESTAMP")
+			.put("url","TEXT")
+			.put("status","TEXT");
+	private final JsonObject configuration = new JsonObject().put("id","SERIAL")
+			.put("country","TEXT")
+			.put("url","TEXT")
+			.put("maintainer","TEXT")
+			.put("curator","TEXT")
+			.put("title","TEXT");
 
 	public InitService(Vertx vertx){
 		this.databaseService = DatabaseService.createProxy(vertx, Constants.DATABASE_SERVICE);
@@ -59,19 +102,19 @@ public class InitService{
 		});
 	}
 
-	private Future<List<JsonObject>> performUpdate(String query){
+	private Future<List<JsonObject>> performUpdate(JsonObject query,String tablename){
 		Future<List<JsonObject>> queryFuture = Future.future();
-		databaseService.update(query, new JsonArray(), queryFuture.completer());
+		databaseService.initTable(query,tablename, queryFuture.completer());
 		return queryFuture;
 	}
 
 	private void initTables(Handler<AsyncResult<Void>> resultHandler){
-		CompositeFuture.all(performUpdate(USER_TABLE_CREATE_QUERY),
-				performUpdate(DATAASSET_TABLE_CREATE_QUERY),
-				performUpdate(DATASOURCE_TABLE_CREATE_QUERY),
-				performUpdate(BROKER_TABLE_CREATE_QUERY),
-				performUpdate(JOB_TABLE_CREATE_QUERY),
-				performUpdate(CONFIGURATION_TABLE_CREATE_QUERY)).setHandler( reply -> {
+		CompositeFuture.all(performUpdate(user,"public.user"),
+				performUpdate(dataasset,"dataasset"),
+				performUpdate(datasource,"datasource"),
+				performUpdate(broker,"broker"),
+				performUpdate(job,"job"),
+				performUpdate(configuration,"configuration")).setHandler( reply -> {
 			if(reply.succeeded()) {
 				LOGGER.info("Tables creation finished.");
 				resultHandler.handle(Future.succeededFuture());

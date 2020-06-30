@@ -25,6 +25,9 @@ public interface DatabaseService {
     @Fluent
     DatabaseService update(String query, JsonArray params, Handler<AsyncResult<List<JsonObject>>> resultHandler);
 
+    @Fluent
+    DatabaseService initTable(JsonObject query, String tablename, Handler<AsyncResult<List<JsonObject>>> resultHandler);
+
     @GenIgnore
     static DatabaseService create(SQLClient dbClient, Handler<AsyncResult<DatabaseService>> readyHandler) {
         return new DatabaseServiceImpl(dbClient, readyHandler);
