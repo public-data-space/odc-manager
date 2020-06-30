@@ -37,7 +37,13 @@ public class IDSMessageParser {
             if(payload != null) {
                 payloadString = IOUtils.toString(multiPartInputStream.getPart("payload").getInputStream(), Charset.defaultCharset());
             }
-            return Optional.of(new IDSMessage(serializer.deserialize(headerString, Message.class), payloadString));
+            Message idsMessage = null;
+            try{
+                idsMessage = serializer.deserialize(headerString, Message.class);
+            } catch( Exception e){
+                LOGGER.error("Could not deserialize message.");
+            }
+            return Optional.of(new IDSMessage(idsMessage, payloadString));
         } catch (IOException e) {
             LOGGER.error(e);
         }
