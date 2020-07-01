@@ -6,6 +6,7 @@ import de.fraunhofer.fokus.ids.persistence.managers.DataAssetManager;
 import de.fraunhofer.fokus.ids.persistence.service.DatabaseService;
 import de.fraunhofer.iais.eis.*;
 import de.fraunhofer.iais.eis.util.PlainLiteral;
+import de.fraunhofer.iais.eis.util.TypedLiteral;
 import io.vertx.core.*;
 import io.vertx.core.buffer.Buffer;
 import io.vertx.core.json.Json;
@@ -27,6 +28,7 @@ import java.io.File;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
@@ -337,18 +339,19 @@ public class IDSService {
 							//						._themes_(null)
 							//						//TODO: (Equivalent) variant of given Resource, e.g. a translation.
 							//						._variant_(null)
+							//._publisher_(null)
+							//._sovereign_(null);
 
 							._version_(da.getVersion())
-							._resourceEndpoint_(getResourceEndpoint(config, da))
-							._publisher_(getAgent(config, "Publisher", "", ""))
-							._sovereign_(getAgent(config, "Sovereign", da.getOrganizationDescription(), da.getOrganizationTitle()));
+							._resourceEndpoint_(getResourceEndpoint(config, da));
+
 					if (da.getDatasetTitle() != null) {
-						r._title_(new ArrayList<>(Arrays.asList(new PlainLiteral(da.getDatasetTitle()))));
+						r._title_(new ArrayList<>(Arrays.asList(new TypedLiteral(da.getDatasetTitle()))));
 					}
 					if (da.getDataSetDescription() != null) {
-						r._description_(new ArrayList<>(Arrays.asList(new PlainLiteral(da.getDataSetDescription()))));
+						r._description_(new ArrayList<>(Arrays.asList(new TypedLiteral(da.getDataSetDescription()))));
 					}
-					ArrayList<PlainLiteral> keywords = getKeyWords(da);
+					ArrayList<TypedLiteral> keywords = getKeyWords(da);
 					if (keywords != null) {
 						r._keyword_(getKeyWords(da));
 					}
@@ -422,25 +425,10 @@ public class IDSService {
 		return null;
 	}
 
-	private Agent getAgent(JsonObject config, String agentRole, String agentDescription , String agentTitle) {
-		Agent agent = null;
-		PlainLiteral desc = agentDescription != null ? new PlainLiteral(agentDescription) : null;
-		PlainLiteral title = agentTitle != null ? new PlainLiteral(agentTitle) : null;
-		try {
-			agent = new AgentBuilder(new URI(config.getString("url")+"#"+agentRole))
-					._description_(new ArrayList<>(Arrays.asList(desc)))
-					._title_(new ArrayList<>(Arrays.asList(title)))
-					.build();
-		} catch (Exception e) {
-			LOGGER.error(e);
-		}
-		return agent;
-	}
-
-	private ArrayList<PlainLiteral> getKeyWords(DataAsset da) {
-		ArrayList<PlainLiteral> keywords = new ArrayList<>();
+	private ArrayList<TypedLiteral> getKeyWords(DataAsset da) {
+		ArrayList<TypedLiteral> keywords = new ArrayList<>();
 		for (String tag : da.getTags()) {
-			keywords.add(new PlainLiteral(tag));
+			keywords.add(new TypedLiteral(tag));
 		}
 		return keywords.isEmpty()? null : keywords;
 	}
