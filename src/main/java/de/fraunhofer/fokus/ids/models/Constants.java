@@ -9,6 +9,6 @@ public class Constants {
     public static final String DATABASE_SERVICE = ROUTE_PREFIX+"databaseService";
     public static final String DOCKER_SERVICE = ROUTE_PREFIX+"dockerService";
     public static final String DATASOURCEADAPTER_SERVICE = ROUTE_PREFIX+"dataSourceAdapterService";
-
+    public static final String AUTHADAPTER_SERVICE = ROUTE_PREFIX+"authAdapterService";
 
 }
