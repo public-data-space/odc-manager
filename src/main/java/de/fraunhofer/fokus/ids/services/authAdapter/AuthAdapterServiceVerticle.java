@@ -37,8 +37,7 @@ public class AuthAdapterServiceVerticle extends AbstractVerticle {
 
         retriever.getConfig(ar -> {
             if (ar.succeeded()) {
-              //  Path path = Paths.get("/ids/certs/");
-                Path path = Paths.get("C:/Users/vbo/git/ids-open-data-connector/infrastructure/fokus/keystore");
+                Path path = Paths.get("/ids/certs/");
 
                 JksOptions jksOptions = new JksOptions();
                 JsonObject authConfig = ar.result().getJsonObject("AUTH_CONFIG");
