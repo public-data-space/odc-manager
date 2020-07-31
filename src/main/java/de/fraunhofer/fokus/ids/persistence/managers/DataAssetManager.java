@@ -1,19 +1,15 @@
 package de.fraunhofer.fokus.ids.persistence.managers;
 
-import de.fraunhofer.fokus.ids.models.Constants;
 import de.fraunhofer.fokus.ids.persistence.entities.DataAsset;
 import de.fraunhofer.fokus.ids.persistence.enums.DataAssetStatus;
-import de.fraunhofer.fokus.ids.persistence.service.DatabaseService;
+import de.fraunhofer.fokus.ids.persistence.util.DatabaseConnector;
 import io.vertx.core.*;
 import io.vertx.core.json.Json;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
-
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Date;
+import io.vertx.sqlclient.Tuple;
 
 import static de.fraunhofer.fokus.ids.persistence.util.Functions.checkNull;
 /**
@@ -22,28 +18,27 @@ import static de.fraunhofer.fokus.ids.persistence.util.Functions.checkNull;
 public class DataAssetManager {
 
 	private Logger LOGGER = LoggerFactory.getLogger(DataAssetManager.class.getName());
-	private DatabaseService dbService;
+	private DatabaseConnector databaseConnector;
 
-	private static final String FINDBYID_QUERY = "SELECT * FROM DataAsset WHERE id = ?";
-	private static final String FINDPUBLISHED_QUERY = "SELECT * FROM DataAsset WHERE status = ?";
+	private static final String FINDBYID_QUERY = "SELECT * FROM DataAsset WHERE id = $1";
+	private static final String FINDPUBLISHED_QUERY = "SELECT * FROM DataAsset WHERE status = $1";
 	private static final String FINDALL_QUERY = "SELECT * FROM DataAsset ORDER BY id DESC";
 	private static final String COUNT_QUERY = "SELECT COUNT(d) FROM DataAsset d";
-	private static final String COUNTPUBLISHED_QUERY = "SELECT COUNT(d) FROM DataAsset d WHERE d.status = ?";
-	private static final String CHANGESTATUS_UPDATE = "UPDATE DataAsset SET status = ?, updated_at = NOW() WHERE id = ?";
-	private static final String ADDINITIAL_UPDATE = "INSERT INTO DataAsset (created_at, updated_at) values(?,?)";
-	private static final String GETID_QUERY = "SELECT id FROM dataasset WHERE created_at = ? ";
-	private static final String ADD_UPDATE = "Update DataAsset SET updated_at = NOW(), datasetid = ?, name = ?, url = ?,"
-			+ " format = ?, licenseurl = ?, licensetitle = ?, datasettitle = ?, datasetnotes = ?, orignalresourceurl = ?,"
-			+ " orignaldataseturl = ?, signature = ?, status = ?, resourceid = ?, tags = ?, datasetdescription = ?,"
-			+ " organizationtitle = ?, organizationdescription = ?, version = ?, sourceid = ? WHERE id = ?";
-	private static final String DELETE_UPDATE = "DELETE FROM dataasset WHERE id = ?";
+	private static final String COUNTPUBLISHED_QUERY = "SELECT COUNT(d) FROM DataAsset d WHERE d.status = $1";
+	private static final String CHANGESTATUS_UPDATE = "UPDATE DataAsset SET status = $1, updated_at = NOW() WHERE id = $2";
+	private static final String ADDINITIAL_UPDATE = "INSERT INTO DataAsset (created_at, updated_at) values(NOW(),NOW()) RETURNING id";
+	private static final String ADD_UPDATE = "Update DataAsset SET updated_at = NOW(), datasetid = $1, name = $2, url = $3,"
+			+ " format = $4, licenseurl = $5, licensetitle = $6, datasettitle = $7, datasetnotes = $8, orignalresourceurl = $9,"
+			+ " orignaldataseturl = $10, signature = $11, status = $12, resourceid = $13, tags = $14, datasetdescription = $15,"
+			+ " organizationtitle = $16, organizationdescription = $17, version = $18, sourceid = $19 WHERE id = $20";
+	private static final String DELETE_UPDATE = "DELETE FROM dataasset WHERE id = $1";
 
-	public DataAssetManager(Vertx vertx) {
-		dbService = DatabaseService.createProxy(vertx, Constants.DATABASE_SERVICE);
+	public DataAssetManager() {
+		databaseConnector = DatabaseConnector.getInstance();
 	}
 
 	public void findById(Long id, Handler<AsyncResult<JsonObject>> resultHandler) {
-		dbService.query(FINDBYID_QUERY, new JsonArray(Arrays.asList(id)), reply -> {
+		databaseConnector.query(FINDBYID_QUERY, Tuple.tuple().addLong(id),reply -> {
 			if (reply.failed()) {
 				LOGGER.error(reply.cause());
 				resultHandler.handle(Future.failedFuture(reply.cause()));
@@ -58,7 +53,7 @@ public class DataAssetManager {
 	}
 
 	public void findPublished(Handler<AsyncResult<JsonArray>> resultHandler) {
-		dbService.query(FINDPUBLISHED_QUERY, new JsonArray(Arrays.asList(DataAssetStatus.PUBLISHED.ordinal())), reply -> {
+		databaseConnector.query(FINDPUBLISHED_QUERY, Tuple.tuple().addInteger(DataAssetStatus.PUBLISHED.ordinal()), reply -> {
 			if (reply.failed()) {
 				LOGGER.error(reply.cause());
 				resultHandler.handle(Future.failedFuture(reply.cause().toString()));
@@ -69,7 +64,7 @@ public class DataAssetManager {
 	}
 
 	public void findAll(Handler<AsyncResult<JsonArray>> resultHandler) {
-		dbService.query(FINDALL_QUERY, new JsonArray(), reply -> {
+		databaseConnector.query(FINDALL_QUERY, Tuple.tuple(), reply -> {
 			if (reply.failed()) {
 				LOGGER.error(reply.cause());
 				resultHandler.handle(Future.failedFuture(reply.cause().toString()));
@@ -80,7 +75,7 @@ public class DataAssetManager {
 	}
 
 	public void count(Handler<AsyncResult<Long>> resultHandler) {
-		dbService.query(COUNT_QUERY, new JsonArray(), reply -> {
+		databaseConnector.query(COUNT_QUERY, Tuple.tuple(), reply -> {
 			if (reply.failed()) {
 				LOGGER.error(reply.cause());
 				resultHandler.handle(Future.failedFuture(reply.cause().toString()));
@@ -91,7 +86,7 @@ public class DataAssetManager {
 	}
 
 	public void countPublished(Handler<AsyncResult<Long>> resultHandler) {
-		dbService.query(COUNTPUBLISHED_QUERY,new JsonArray(Arrays.asList(DataAssetStatus.PUBLISHED.ordinal())), reply -> {
+		databaseConnector.query(COUNTPUBLISHED_QUERY,Tuple.tuple().addInteger(DataAssetStatus.PUBLISHED.ordinal()), reply -> {
 			if (reply.failed()) {
 				LOGGER.error(reply.cause());
 				resultHandler.handle(Future.failedFuture(reply.cause().toString()));
@@ -102,7 +97,7 @@ public class DataAssetManager {
 	}
 
 	public void changeStatus(DataAssetStatus status, Long id, Handler<AsyncResult<Void>> resultHandler) {
-		dbService.update(CHANGESTATUS_UPDATE,new JsonArray().add(status.ordinal()).add(id), reply -> {
+		databaseConnector.query(CHANGESTATUS_UPDATE, Tuple.tuple().addInteger(status.ordinal()).addLong(id), reply -> {
 			if (reply.failed()) {
 				LOGGER.error(reply.cause());
 				resultHandler.handle(Future.failedFuture(reply.cause().toString()));
@@ -113,28 +108,9 @@ public class DataAssetManager {
 	}
 
 	public void addInitial(Handler<AsyncResult<Long>> resultHandler){
-		Date d = new Date();
-		JsonArray params = new JsonArray()
-				.add(d.toInstant())
-				.add(d.toInstant());
-
-		dbService.update(ADDINITIAL_UPDATE, params, reply -> {
+		databaseConnector.query(ADDINITIAL_UPDATE, Tuple.tuple(), reply -> {
 			if (reply.succeeded()) {
-				dbService.query(GETID_QUERY, new JsonArray().add(d.toInstant()), reply2 -> {
-					if(reply2.succeeded()){
-						if(reply2.result().size() == 1) {
-							resultHandler.handle(Future.succeededFuture(reply2.result().get(0).getLong("id")));
-						}
-						else{
-							LOGGER.error("Concurrency exception.");
-							resultHandler.handle(Future.failedFuture("Concurrency exception."));
-						}
-					}
-					else{
-						LOGGER.error(reply2.cause());
-						resultHandler.handle(Future.failedFuture(reply2.cause()));
-					}
-				});
+				resultHandler.handle(Future.succeededFuture(reply.result().get(0).getLong("id")));
 			} else {
 				LOGGER.error(reply.cause());
 				resultHandler.handle(Future.failedFuture(reply.cause()));
@@ -146,29 +122,29 @@ public class DataAssetManager {
 
 		DataAsset dataAsset = Json.decodeValue(dataAssetJson.toString(),DataAsset.class);
 
-		JsonArray params = new JsonArray()
-				.add(checkNull(dataAsset.getDatasetID()))
-				.add(checkNull(dataAsset.getName()))
-				.add(checkNull(dataAsset.getUrl()))
-				.add(checkNull(dataAsset.getFormat()))
-				.add(checkNull(dataAsset.getLicenseUrl()))
-				.add(checkNull(dataAsset.getLicenseTitle()))
-				.add(checkNull(dataAsset.getDatasetTitle()))
-				.add(checkNull(dataAsset.getDatasetNotes()))
-				.add(checkNull(dataAsset.getOrignalResourceURL()))
-				.add(checkNull(dataAsset.getOrignalDatasetURL()))
-				.add(checkNull(dataAsset.getSignature()))
-				.add(dataAsset.getStatus() == null ? DataAssetStatus.UNAPPROVED.ordinal() : dataAsset.getStatus().ordinal())
-				.add(checkNull(dataAsset.getResourceID()))
-				.add(dataAsset.getTags() == null ||dataAsset.getTags().isEmpty() ? new ArrayList<String>(): dataAsset.getTags())
-				.add(checkNull(dataAsset.getDataSetDescription()))
-				.add(checkNull(dataAsset.getOrganizationTitle()))
-				.add(checkNull(dataAsset.getOrganizationDescription()))
-				.add(checkNull(dataAsset.getVersion()))
-				.add(checkNull(dataAsset.getSourceID().toString()))
-				.add(dataAsset.getId());
+		Tuple params = Tuple.tuple()
+				.addString(checkNull(dataAsset.getDatasetID()))
+				.addString(checkNull(dataAsset.getName()))
+				.addString(checkNull(dataAsset.getUrl()))
+				.addString(checkNull(dataAsset.getFormat()))
+				.addString(checkNull(dataAsset.getLicenseUrl()))
+				.addString(checkNull(dataAsset.getLicenseTitle()))
+				.addString(checkNull(dataAsset.getDatasetTitle()))
+				.addString(checkNull(dataAsset.getDatasetNotes()))
+				.addString(checkNull(dataAsset.getOrignalResourceURL()))
+				.addString(checkNull(dataAsset.getOrignalDatasetURL()))
+				.addString(checkNull(dataAsset.getSignature()))
+				.addInteger(dataAsset.getStatus() == null ? DataAssetStatus.UNAPPROVED.ordinal() : dataAsset.getStatus().ordinal())
+				.addString(checkNull(dataAsset.getResourceID()))
+				.addStringArray(dataAsset.getTags() == null ||dataAsset.getTags().isEmpty() ? new String[0] : dataAsset.getTags().toArray(new String[0]))
+				.addString(checkNull(dataAsset.getDataSetDescription()))
+				.addString(checkNull(dataAsset.getOrganizationTitle()))
+				.addString(checkNull(dataAsset.getOrganizationDescription()))
+				.addString(checkNull(dataAsset.getVersion()))
+				.addString(checkNull(dataAsset.getSourceID().toString()))
+				.addLong(dataAsset.getId());
 
-		dbService.update(ADD_UPDATE,params, reply -> {
+		databaseConnector.query(ADD_UPDATE,params, reply -> {
 			if (reply.failed()) {
 				LOGGER.error(reply.cause());
 				resultHandler.handle(Future.failedFuture(reply.cause().toString()));
@@ -179,7 +155,7 @@ public class DataAssetManager {
 	}
 
 	public void delete(Long id, Handler<AsyncResult<Void>> resultHandler) {
-		dbService.update(DELETE_UPDATE, new JsonArray().add(id), reply -> {
+		databaseConnector.query(DELETE_UPDATE, Tuple.tuple().addLong(id), reply -> {
 			if (reply.failed()) {
 				LOGGER.error(reply.cause());
 				resultHandler.handle(Future.failedFuture(reply.cause().toString()));

@@ -1,11 +1,9 @@
 package de.fraunhofer.fokus.ids.persistence.managers;
 
-import de.fraunhofer.fokus.ids.models.Constants;
 import de.fraunhofer.fokus.ids.persistence.entities.User;
-import de.fraunhofer.fokus.ids.persistence.service.DatabaseService;
+import de.fraunhofer.fokus.ids.persistence.util.DatabaseConnector;
 import io.vertx.core.*;
 import io.vertx.core.json.Json;
-import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
@@ -13,9 +11,9 @@ import io.vertx.ext.auth.PubSecKeyOptions;
 import io.vertx.ext.auth.jwt.JWTAuth;
 import io.vertx.ext.auth.jwt.JWTAuthOptions;
 import io.vertx.ext.jwt.JWTOptions;
+import io.vertx.sqlclient.Tuple;
 import org.mindrot.jbcrypt.BCrypt;
 
-import java.util.Arrays;
 /**
  * @author Vincent Bohlen, vincent.bohlen@fokus.fraunhofer.de
  */
@@ -24,12 +22,11 @@ public class AuthManager {
     private Logger LOGGER = LoggerFactory.getLogger(AuthManager.class.getName());
     private JWTAuth provider;
 
-    private DatabaseService dbService;
+    private DatabaseConnector databaseConnector = DatabaseConnector.getInstance();
 
-    private static final String USER_QUERY = "SELECT * FROM public.user WHERE username = ?";
+    private static final String USER_QUERY = "SELECT * FROM public.user WHERE username = $1";
 
     public AuthManager(Vertx vertx) {
-        dbService = DatabaseService.createProxy(vertx, Constants.DATABASE_SERVICE);
         provider = JWTAuth.create(vertx, new JWTAuthOptions()
                 .addPubSecKey(new PubSecKeyOptions()
                         .setAlgorithm("HS256")
@@ -44,7 +41,7 @@ public class AuthManager {
 
     public void login(JsonObject credentials, Handler<AsyncResult<String>> resultHandler) {
 
-        dbService.query(USER_QUERY,  new JsonArray(Arrays.asList(credentials.getString("username"))), reply -> {
+        databaseConnector.query(USER_QUERY, Tuple.tuple().addString(credentials.getString("username")),reply -> {
             if (reply.failed()) {
                 LOGGER.error(reply.cause());
                 resultHandler.handle(Future.failedFuture(reply.cause().toString()));

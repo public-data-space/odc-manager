@@ -10,7 +10,9 @@ import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
-
+/**
+ * @author Vincent Bohlen, vincent.bohlen@fokus.fraunhofer.de
+ */
 public class DockerController {
     private Logger LOGGER = LoggerFactory.getLogger(DockerController.class.getName());
     private DockerService dockerService;

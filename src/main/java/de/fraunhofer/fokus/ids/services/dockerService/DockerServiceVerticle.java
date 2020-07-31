@@ -6,16 +6,19 @@ import io.vertx.config.ConfigRetrieverOptions;
 import io.vertx.config.ConfigStoreOptions;
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Future;
+import io.vertx.core.Promise;
 import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
 import io.vertx.ext.web.client.WebClient;
 import io.vertx.serviceproxy.ServiceBinder;
-
+/**
+ * @author Vincent Bohlen, vincent.bohlen@fokus.fraunhofer.de
+ */
 public class DockerServiceVerticle extends AbstractVerticle {
     private Logger LOGGER = LoggerFactory.getLogger(DockerServiceVerticle.class.getName());
 
     @Override
-    public void start(Future<Void> startFuture) {
+    public void start(Promise<Void> startPromise) {
         WebClient webClient = WebClient.create(vertx);
 
         ConfigStoreOptions confStore = new ConfigStoreOptions()
@@ -27,22 +30,22 @@ public class DockerServiceVerticle extends AbstractVerticle {
 
         retriever.getConfig(ar -> {
             if (ar.succeeded()) {
-                DockerService.create(webClient, ar.result().getInteger("CONFIG_MANAGER_PORT"), ar.result().getString("CONFIG_MANAGER_HOST"), ar.result().getString("CONFIG_MANAGER_API_KEY"), ready -> {
+                DockerService.create(webClient, ar.result().getJsonObject("CONFIG_MANAGER_CONFIG"), ready -> {
                     if (ready.succeeded()) {
                         ServiceBinder binder = new ServiceBinder(vertx);
                         binder
                                 .setAddress(Constants.DOCKER_SERVICE)
                                 .register(DockerService.class, ready.result());
                         LOGGER.info("DockerService successfully started.");
-                        startFuture.complete();
+                        startPromise.complete();
                     } else {
                         LOGGER.error(ready.cause());
-                        startFuture.fail(ready.cause());
+                        startPromise.fail(ready.cause());
                     }
                 });
             } else {
                 LOGGER.error(ar.cause());
-                startFuture.fail(ar.cause());
+                startPromise.fail(ar.cause());
             }
         });
     }

@@ -5,6 +5,7 @@ import de.fraunhofer.fokus.ids.models.Constants;
 import de.fraunhofer.fokus.ids.models.DataAssetDescription;
 import de.fraunhofer.fokus.ids.persistence.entities.DataAsset;
 import de.fraunhofer.fokus.ids.persistence.entities.DataSource;
+import de.fraunhofer.fokus.ids.persistence.entities.serialization.DataSourceSerializer;
 import de.fraunhofer.fokus.ids.persistence.enums.DataAssetStatus;
 import de.fraunhofer.fokus.ids.persistence.enums.JobStatus;
 import de.fraunhofer.fokus.ids.persistence.managers.DataAssetManager;
@@ -19,6 +20,7 @@ import io.vertx.core.json.JsonObject;
 import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
 
+import java.text.ParseException;
 import java.util.ArrayList;
 
 /**
@@ -34,16 +36,15 @@ public class DataAssetController {
     private BrokerController brokerController;
 
     public DataAssetController(Vertx vertx) {
-        dataAssetManager = new DataAssetManager(vertx);
-        jobManager = new JobManager(vertx);
-        this.dataSourceManager = new DataSourceManager(vertx);
+        dataAssetManager = new DataAssetManager();
+        jobManager = new JobManager();
+        this.dataSourceManager = new DataSourceManager();
         dataSourceAdapterService = DataSourceAdapterService.createProxy(vertx, Constants.DATASOURCEADAPTER_SERVICE);
         brokerController = new BrokerController(vertx);
     }
 
     public void counts(Handler<AsyncResult<JsonObject>> resultHandler) {
-
-        Future<Long> count = Future.future();
+        Promise<Long> count = Promise.promise();
         dataAssetManager.count(reply -> {
             if (reply.succeeded()) {
                 count.complete(reply.result());
@@ -53,7 +54,7 @@ public class DataAssetController {
             }
         });
 
-        Future<Long> countPublished = Future.future();
+        Promise<Long> countPublished = Promise.promise();
         dataAssetManager.countPublished(reply -> {
             if (reply.succeeded()) {
                 countPublished.complete(reply.result());
@@ -63,14 +64,14 @@ public class DataAssetController {
             }
         });
 
-        CompositeFuture.all(count, countPublished).setHandler(ar -> {
+        CompositeFuture.all(count.future(), countPublished.future()).onComplete(ar -> {
             if (ar.succeeded()) {
                 JsonObject jO = new JsonObject();
-                jO.put("dacount", count.result());
-                jO.put("publishedcount", countPublished.result());
+                jO.put("dacount", count.future().result());
+                jO.put("publishedcount", countPublished.future().result());
                 resultHandler.handle(Future.succeededFuture(jO));
             } else {
-                LOGGER.error("Composite Future failed.\n\n" + ar.cause());
+                LOGGER.error("Composite Future failed.",  ar.cause());
                 resultHandler.handle(Future.failedFuture(ar.cause()));
             }
         });
@@ -113,32 +114,18 @@ public class DataAssetController {
                     dataSourceManager.findByType("File Upload",dataSourceReply -> {
                         DataAsset dataAsset = new DataAsset();
                         if (dataSourceReply.succeeded()){
-                            String dts = dataSourceReply.result().toString().replace("[","").replace("]","");
-                            DataSource dataSource = Json.decodeValue(dts, DataSource.class);
-                            DataAssetCreateMessage mes = new DataAssetCreateMessage();
-                            mes.setData(new JsonObject(dataAssetDescription.getData()));
-                            mes.setDataSource(dataSource);
-                            mes.setDataAssetId(initCreateReply.result());
+                            DataSource dataSource = null;
+                            try {
+                                dataSource = DataSourceSerializer.deserialize(dataSourceReply.result().getJsonObject(0));
+                            } catch (ParseException e) {
+                                LOGGER.error(e);
+                                next.handle(Future.failedFuture(e));
+                            }
 
-                            dataAsset.setId(mes.getDataAssetId());
+                            dataAsset.setId(initCreateReply.result());
                             dataAsset.setSourceID(dataSource.getId());
-                            dataAsset.setFormat(mes.getData().getString("format", null));
-                            dataAsset.setName(mes.getData().getString("name", null));
-                            dataAsset.setResourceID(mes.getData().getString("resourceid", null));
-                            dataAsset.setUrl(mes.getData().getString("file", null));
-                            dataAsset.setOrignalResourceURL(mes.getData().getString("originalurl", null));
-                            dataAsset.setDatasetID(mes.getData().getString("datasetId", null));
-                            dataAsset.setDatasetNotes(mes.getData().getString("datasetnotes", null));
-                            dataAsset.setDatasetTitle(mes.getData().getString("datasettitle", null));
-                            dataAsset.setLicenseTitle(mes.getData().getString("licensetitle", null));
-                            dataAsset.setLicenseUrl(mes.getData().getString("licenseurl", null));
-                            dataAsset.setOrignalDatasetURL(mes.getData().getString("originaldataseturl", null));
-                            dataAsset.setOrganizationDescription(mes.getData().getString("organizationdescription", null));
-                            dataAsset.setOrganizationTitle(mes.getData().getString("originalURL", null));
-                            dataAsset.setTags(mes.getData().getJsonArray("tags",new JsonArray()).getList());
-                            dataAsset.setVersion(mes.getData().getString("version", null));
-                            dataAsset.setDataSetDescription(mes.getData().getString("datasetdescription", null));
-                            dataAsset.setSignature(mes.getData().getString("signature", null));
+                            dataAsset.setDatasetNotes((String)dataAssetDescription.getData().get("datasetnotes"));
+                            dataAsset.setDatasetTitle((String)dataAssetDescription.getData().get("datasettitle"));
                             dataAsset.setStatus(DataAssetStatus.APPROVED);
                             next.handle(Future.succeededFuture(dataAsset));
                         }
@@ -151,7 +138,14 @@ public class DataAssetController {
                 else {
                     dataSourceManager.findById(Integer.toUnsignedLong(dataAssetDescription.getSourceId()), dataSourceReply -> {
                         if (dataSourceReply.succeeded()) {
-                            DataSource dataSource = Json.decodeValue(dataSourceReply.result().toString(), DataSource.class);
+
+                            DataSource dataSource = null;
+                            try {
+                                dataSource = DataSourceSerializer.deserialize(dataSourceReply.result());
+                            } catch (ParseException e) {
+                                LOGGER.error(e);
+                                next.handle(Future.failedFuture(e));
+                            }
 
                             DataAssetCreateMessage mes = new DataAssetCreateMessage();
                             mes.setData(new JsonObject(dataAssetDescription.getData()));
@@ -224,10 +218,10 @@ public class DataAssetController {
                 ArrayList<Future> publishFutures = new ArrayList<>();
                 for (int i = 0; i < reply.result().size(); i++) {
                     DataAsset da = Json.decodeValue(reply.result().getJsonObject(i).toString(), DataAsset.class);
-                    Future f = Future.future();
-                    dataAssetManager.changeStatus(DataAssetStatus.PUBLISHED, da.getId(), f.completer());
+                    Promise promise = Promise.promise();
+                    dataAssetManager.changeStatus(DataAssetStatus.PUBLISHED, da.getId(), promise.future());
                 }
-                CompositeFuture.all(publishFutures).setHandler(reply2 -> {
+                CompositeFuture.all(publishFutures).onComplete(reply2 -> {
                     if (reply2.succeeded()) {
                         brokerController.update(reply3 -> {
                             if (reply3.succeeded()) {
@@ -257,10 +251,10 @@ public class DataAssetController {
                 ArrayList<Future> publishFutures = new ArrayList<>();
                 for (int i = 0; i < reply.result().size(); i++) {
                     DataAsset da = Json.decodeValue(reply.result().getJsonObject(i).toString(), DataAsset.class);
-                    Future f = Future.future();
-                    dataAssetManager.changeStatus(DataAssetStatus.APPROVED, da.getId(), f.completer());
+                    Promise promise = Promise.promise();
+                    dataAssetManager.changeStatus(DataAssetStatus.APPROVED, da.getId(), promise.future());
                 }
-                CompositeFuture.all(publishFutures).setHandler(reply2 -> {
+                CompositeFuture.all(publishFutures).onComplete(reply2 -> {
                     if (reply2.succeeded()) {
                         brokerController.update(reply3 -> {
                             if (reply3.succeeded()) {
@@ -333,13 +327,13 @@ public class DataAssetController {
 			if(dataAssetReply.succeeded()){
 				dataSourceManager.findById(Json.decodeValue(dataAssetReply.result().toString(), DataAsset.class).getSourceID(), reply2 -> {
 				    if(reply2.succeeded()){
-						Future<JsonObject> serviceDeleteFuture = Future.future();
-						dataSourceAdapterService.delete(reply2.result().getString("datasourcetype"), id, serviceDeleteFuture.completer());
+                        Promise<JsonObject> serviceDeletePromise = Promise.promise();
+						dataSourceAdapterService.delete(reply2.result().getString("datasourcetype"), id, serviceDeletePromise.future());
 
-						Future<Void> databaseDeleteFuture = Future.future();
-						dataAssetManager.delete(id, databaseDeleteFuture.completer());
+						Promise<Void> databaseDeletePromise = Promise.promise();
+						dataAssetManager.delete(id, databaseDeletePromise.future());
 
-						CompositeFuture.all(databaseDeleteFuture, serviceDeleteFuture).setHandler( ar -> {
+						CompositeFuture.all(databaseDeletePromise.future(), serviceDeletePromise.future()).onComplete( ar -> {
 							if(ar.succeeded()){
 								brokerController.update(reply -> {
 								    if(reply.succeeded()){

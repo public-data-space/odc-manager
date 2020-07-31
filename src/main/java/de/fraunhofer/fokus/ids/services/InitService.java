@@ -1,17 +1,18 @@
 package de.fraunhofer.fokus.ids.services;
 
-import de.fraunhofer.fokus.ids.models.Constants;
-import de.fraunhofer.fokus.ids.persistence.service.DatabaseService;
-import edu.emory.mathcs.backport.java.util.Arrays;
+import de.fraunhofer.fokus.ids.persistence.util.DatabaseConnector;
 import io.vertx.config.ConfigRetriever;
 import io.vertx.config.ConfigRetrieverOptions;
 import io.vertx.config.ConfigStoreOptions;
 import io.vertx.core.*;
-import io.vertx.core.json.Json;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
+import io.vertx.pgclient.PgPool;
+import io.vertx.sqlclient.Row;
+import io.vertx.sqlclient.RowSet;
+import io.vertx.sqlclient.Tuple;
 import org.mindrot.jbcrypt.BCrypt;
 
 import java.util.ArrayList;
@@ -24,20 +25,18 @@ public class InitService{
 
 	private final Logger LOGGER = LoggerFactory.getLogger(InitService.class.getName());
 
-	private DatabaseService databaseService;
 	private Vertx vertx;
 
-	private final String ADMIN_CREATE_QUERY = "INSERT INTO public.user(created_at, updated_at, username, password) SELECT NOW(), NOW(), ?, ? WHERE NOT EXISTS ( SELECT 1 FROM public.user WHERE username=?)";
-	private final String DATASOURCEFILEUPLOAD_CREATE_QUERY = "INSERT INTO datasource(created_at, updated_at, datasourcename,data, datasourcetype) SELECT NOW(), NOW(), ?, ? ,? WHERE NOT EXISTS ( SELECT 1 FROM datasource WHERE datasourcetype=?)";
+	private final String ADMIN_CREATE_QUERY = "INSERT INTO public.user(created_at, updated_at, username, password) SELECT NOW(), NOW(), $1, $2 WHERE NOT EXISTS ( SELECT 1 FROM public.user WHERE username=$1)";
+	private final String DATASOURCEFILEUPLOAD_CREATE_QUERY = "INSERT INTO datasource(created_at, updated_at, datasourcename,data, datasourcetype) SELECT NOW(), NOW(), $1, $2 ,$3 WHERE NOT EXISTS ( SELECT 1 FROM datasource WHERE datasourcetype=$3)";
 	private final String USER_TABLE_CREATE_QUERY = "CREATE TABLE IF NOT EXISTS public.user (id SERIAL , created_at TIMESTAMP , updated_at TIMESTAMP , username TEXT, password TEXT)";
 	private final String DATAASSET_TABLE_CREATE_QUERY = "CREATE TABLE IF NOT EXISTS dataasset (id SERIAL, created_at TIMESTAMP, updated_at TIMESTAMP, datasetid TEXT, name TEXT, url TEXT, format TEXT, licenseurl TEXT, licensetitle TEXT, datasettitle TEXT, datasetnotes TEXT, orignalresourceurl TEXT, orignaldataseturl TEXT, signature TEXT, status INTEGER, resourceid TEXT, tags TEXT[] , datasetdescription TEXT, organizationtitle TEXT, organizationdescription TEXT, version TEXT, sourceid TEXT)";
 	private final String DATASOURCE_TABLE_CREATE_QUERY = "CREATE TABLE IF NOT EXISTS datasource (id SERIAL, created_at TIMESTAMP, updated_at TIMESTAMP, datasourcename TEXT, data JSONB, datasourcetype TEXT)";
 	private final String JOB_TABLE_CREATE_QUERY = "CREATE TABLE IF NOT EXISTS job (id SERIAL, created_at TIMESTAMP, updated_at TIMESTAMP, data JSONB, status INTEGER, sourceid BIGINT, sourcetype TEXT)";
 	private final String BROKER_TABLE_CREATE_QUERY = "CREATE TABLE IF NOT EXISTS broker (id SERIAL, created_at TIMESTAMP, updated_at TIMESTAMP, url TEXT, status TEXT)";
-	private final String CONFIGURATION_TABLE_CREATE_QUERY = "CREATE TABLE IF NOT EXISTS configuration (id SERIAL, country TEXT, url TEXT, maintainer TEXT, curator TEXT, title TEXT)";
+	private final String CONFIGURATION_TABLE_CREATE_QUERY = "CREATE TABLE IF NOT EXISTS configuration (id SERIAL, country TEXT, url TEXT, maintainer TEXT, curator TEXT, title TEXT, jwt TEXT)";
 
 	public InitService(Vertx vertx){
-		this.databaseService = DatabaseService.createProxy(vertx, Constants.DATABASE_SERVICE);
 		this.vertx = vertx;
 	}
 
@@ -60,21 +59,45 @@ public class InitService{
 	}
 
 	private Future<List<JsonObject>> performUpdate(String query){
-		Future<List<JsonObject>> queryFuture = Future.future();
-		databaseService.update(query, new JsonArray(), queryFuture.completer());
+		Promise<List<JsonObject>> queryPromise = Promise.promise();
+		Future<List<JsonObject>> queryFuture = queryPromise.future();
+		DatabaseConnector.getInstance().query(query, Tuple.tuple(), queryFuture);
+		return queryFuture;
+	}
+
+	private Future<List<JsonObject>> performFileUploadTabelCreation(){
+		Promise<List<JsonObject>> queryPromise = Promise.promise();
+		Future<List<JsonObject>> queryFuture = queryPromise.future();
+		DatabaseConnector.getInstance().query(DATASOURCEFILEUPLOAD_CREATE_QUERY, Tuple.tuple()
+				.addString("File Upload")
+				.addValue(new JsonObject())
+				.addString("File Upload"), queryFuture);
 		return queryFuture;
 	}
 
 	private void initTables(Handler<AsyncResult<Void>> resultHandler){
-		CompositeFuture.all(performUpdate(USER_TABLE_CREATE_QUERY),
-				performUpdate(DATAASSET_TABLE_CREATE_QUERY),
-				performUpdate(DATASOURCE_TABLE_CREATE_QUERY),
-				performUpdate(BROKER_TABLE_CREATE_QUERY),
-				performUpdate(JOB_TABLE_CREATE_QUERY),
-				performUpdate(CONFIGURATION_TABLE_CREATE_QUERY)).setHandler( reply -> {
+
+		ArrayList<Future> list = new ArrayList<Future>() {{
+			performUpdate(USER_TABLE_CREATE_QUERY);
+			performUpdate(DATAASSET_TABLE_CREATE_QUERY);
+			performUpdate(DATASOURCE_TABLE_CREATE_QUERY);
+			performUpdate(BROKER_TABLE_CREATE_QUERY);
+			performUpdate(JOB_TABLE_CREATE_QUERY);
+			performUpdate(CONFIGURATION_TABLE_CREATE_QUERY);
+		}};
+
+		CompositeFuture.all(list).onComplete( reply -> {
 			if(reply.succeeded()) {
-				LOGGER.info("Tables creation finished.");
-				resultHandler.handle(Future.succeededFuture());
+				Future fileUploadFuture = performFileUploadTabelCreation();
+				fileUploadFuture.onComplete(reply2 -> {
+					if(fileUploadFuture.succeeded()){
+						LOGGER.info("Tables creation finished.");
+						resultHandler.handle(Future.succeededFuture());
+					} else {
+						LOGGER.info("File Upload entry creation failed.");
+						resultHandler.handle(Future.failedFuture(fileUploadFuture.cause()));
+					}
+				});
 			}
 			else{
 				LOGGER.error("Tables creation failed", reply.cause());
@@ -94,26 +117,13 @@ public class InitService{
 
 		retriever.getConfig(ar -> {
 			if (ar.succeeded()) {
-				databaseService.update(ADMIN_CREATE_QUERY, new JsonArray()
-						.add(ar.result().getString("FRONTEND_ADMIN"))
-						.add(BCrypt.hashpw(ar.result().getString("FRONTEND_ADMIN_PW"), BCrypt.gensalt()))
-						.add(ar.result().getString("FRONTEND_ADMIN")), reply -> {
+				DatabaseConnector.getInstance().query(ADMIN_CREATE_QUERY, Tuple.tuple()
+						.addString(ar.result().getJsonObject("FRONTEND_CONFIG").getString("username"))
+						.addString(BCrypt.hashpw(ar.result().getJsonObject("FRONTEND_CONFIG").getString("password"), BCrypt.gensalt()))
+						, reply -> {
 					if (reply.succeeded()) {
 						LOGGER.info("Adminuser created.");
-						JsonObject jsonObject = new JsonObject();
-						databaseService.update(DATASOURCEFILEUPLOAD_CREATE_QUERY, new JsonArray()
-								.add("File Upload")
-								.add(jsonObject)
-								.add("File Upload")
-								.add("File Upload"), reply2 -> {
-							if (reply2.succeeded()) {
-								LOGGER.info("FileUpload DataSource created.");
-								resultHandler.handle(Future.succeededFuture());
-							} else {
-								LOGGER.error("FileUpload DataSource creation failed.", reply2.cause());
-								resultHandler.handle(Future.failedFuture(reply2.cause()));
-							}
-						});
+						resultHandler.handle(Future.succeededFuture());
 					} else {
 						LOGGER.error("Adminuser creation failed.", reply.cause());
 						resultHandler.handle(Future.failedFuture(reply.cause()));
@@ -126,5 +136,4 @@ public class InitService{
 			}
 		});
 	}
-
 }

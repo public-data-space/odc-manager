@@ -1,15 +1,15 @@
 package de.fraunhofer.fokus.ids.persistence.managers;
 
-import de.fraunhofer.fokus.ids.models.Constants;
 import de.fraunhofer.fokus.ids.models.DataAssetDescription;
 import de.fraunhofer.fokus.ids.persistence.enums.JobStatus;
-import de.fraunhofer.fokus.ids.persistence.service.DatabaseService;
+import de.fraunhofer.fokus.ids.persistence.util.DatabaseConnector;
 import io.vertx.core.*;
 import io.vertx.core.json.Json;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
+import io.vertx.sqlclient.Tuple;
 
 import java.util.HashMap;
 /**
@@ -17,28 +17,28 @@ import java.util.HashMap;
  */
 public class JobManager {
 
-	private DatabaseService dbService;
+	private DatabaseConnector databaseConnector;
 	private Logger LOGGER = LoggerFactory.getLogger(JobManager.class.getName());
 
-	private static final String ADD_QUERY = "INSERT INTO job (created_at,updated_at,data,status,sourceid, sourcetype) values (NOW(), NOW(), ?, ?, ?, ?) RETURNING id";
+	private static final String ADD_QUERY = "INSERT INTO job (created_at,updated_at,data,status,sourceid, sourcetype) values (NOW(), NOW(), $1, $2, $3, $4) RETURNING id";
 	private static final String FINDALL_QUERY = "SELECT * FROM job";
 	private static final String DELETEALL_QUERY = "DELETE FROM job";
-	private static final String UPDATESTATUS_QUERY = "UPDATE job SET status = ?, updated_at = NOW() WHERE id = ?";
+	private static final String UPDATESTATUS_QUERY = "UPDATE job SET status = $1, updated_at = NOW() WHERE id = $2";
 
-	public JobManager(Vertx vertx) {
-		dbService = DatabaseService.createProxy(vertx, Constants.DATABASE_SERVICE);
+	public JobManager() {
+		databaseConnector = DatabaseConnector.getInstance();
 	}
 
 	public void add(JsonObject dataAssetDescriptionJson, Handler<AsyncResult<JsonObject>> resultHandler) {
 		DataAssetDescription dataAssetDescription = Json.decodeValue(dataAssetDescriptionJson.toString(), DataAssetDescription.class);
 
-		JsonArray params = new JsonArray()
-				.add(new JsonObject((dataAssetDescription.getData().isEmpty() ? new HashMap<>() : dataAssetDescription.getData())).toString())
-				.add(JobStatus.CREATED.ordinal())
-				.add(dataAssetDescription.getSourceId())
-				.add(dataAssetDescription.getDatasourcetype());
+		Tuple params = Tuple.tuple()
+				.addValue(new JsonObject((dataAssetDescription.getData().isEmpty() ? new HashMap<>() : dataAssetDescription.getData())).toString())
+				.addInteger(JobStatus.CREATED.ordinal())
+				.addInteger(dataAssetDescription.getSourceId())
+				.addString(dataAssetDescription.getDatasourcetype());
 
-		dbService.query(ADD_QUERY, params, reply -> {
+		databaseConnector.query(ADD_QUERY, params, reply -> {
 			if (reply.failed()) {
 				LOGGER.error(reply.cause());
 				resultHandler.handle(Future.failedFuture(reply.cause().toString()));
@@ -49,7 +49,7 @@ public class JobManager {
 	}
 
 	public void findAll(Handler<AsyncResult<JsonArray>> resultHandler) {
-		dbService.query(FINDALL_QUERY, new JsonArray(), reply -> {
+		databaseConnector.query(FINDALL_QUERY, Tuple.tuple(), reply -> {
 			if (reply.failed()) {
 				LOGGER.error(reply.cause());
 				resultHandler.handle(Future.failedFuture(reply.cause().toString()));
@@ -60,7 +60,7 @@ public class JobManager {
 	}
 
 	public void deleteAll(Handler<AsyncResult<Void>> resultHandler) {
-		dbService.update(DELETEALL_QUERY, new JsonArray(), reply -> {
+		databaseConnector.query(DELETEALL_QUERY, Tuple.tuple(), reply -> {
 			if (reply.failed()) {
 				LOGGER.error(reply.cause());
 				resultHandler.handle(Future.failedFuture(reply.cause().toString()));
@@ -71,7 +71,7 @@ public class JobManager {
 	}
 
 	public void updateStatus(Long id, JobStatus status, Handler<AsyncResult<Void>> resultHandler) {
-		dbService.query(UPDATESTATUS_QUERY, new JsonArray().add(status.ordinal()).add(id), reply -> {
+		databaseConnector.query(UPDATESTATUS_QUERY, Tuple.tuple().addInteger(status.ordinal()).addLong(id), reply -> {
 			if (reply.failed()) {
 				LOGGER.error(reply.cause());
 				resultHandler.handle(Future.failedFuture(reply.cause().toString()));

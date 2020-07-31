@@ -10,7 +10,9 @@ import io.vertx.core.Vertx;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.client.WebClient;
-
+/**
+ * @author Vincent Bohlen, vincent.bohlen@fokus.fraunhofer.de
+ */
 @ProxyGen
 @VertxGen
 public interface DockerService {
@@ -34,8 +36,8 @@ public interface DockerService {
     DockerService getDataSourceFormSchema(String dataSourceType, Handler<AsyncResult<JsonObject>> resultHandler);
 
     @GenIgnore
-    static DockerService create(WebClient webClient, int gatewayPort, String gatewayHost, String configManagerApikey, Handler<AsyncResult<DockerService>> readyHandler) {
-        return new DockerServiceImpl(webClient, gatewayPort, gatewayHost, configManagerApikey, readyHandler);
+    static DockerService create(WebClient webClient,JsonObject config, Handler<AsyncResult<DockerService>> readyHandler) {
+        return new DockerServiceImpl(webClient, config, readyHandler);
     }
 
     @GenIgnore

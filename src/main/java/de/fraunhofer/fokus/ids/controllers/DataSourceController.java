@@ -19,7 +19,7 @@ public class DataSourceController {
     private DockerService dockerService;
 
     public DataSourceController(Vertx vertx){
-        this.dataSourceManager = new DataSourceManager(vertx);
+        this.dataSourceManager = new DataSourceManager();
         this.dockerService = DockerService.createProxy(vertx, Constants.DOCKER_SERVICE);
     }
 
