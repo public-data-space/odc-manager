@@ -30,8 +30,8 @@ public interface DataSourceAdapterService {
     DataSourceAdapterService createDataAsset(String dataSourceType, JsonObject message, Handler<AsyncResult<JsonObject>> resultHandler);
 
     @GenIgnore
-    static DataSourceAdapterService create(Vertx vertx, WebClient webClient, int gatewayPort, String gatewayHost, String configManagerApikey, String tempFileRootPath, Handler<AsyncResult<DataSourceAdapterService>> readyHandler) {
-        return new DataSourceAdapterServiceImpl(vertx, webClient, gatewayPort, gatewayHost, configManagerApikey, tempFileRootPath, readyHandler);
+    static DataSourceAdapterService create(Vertx vertx, WebClient webClient, JsonObject config, String tempFileRootPath, Handler<AsyncResult<DataSourceAdapterService>> readyHandler) {
+        return new DataSourceAdapterServiceImpl(vertx, webClient, config, tempFileRootPath, readyHandler);
     }
 
     @GenIgnore

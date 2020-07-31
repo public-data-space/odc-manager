@@ -6,6 +6,7 @@ import io.vertx.core.Handler;
 import io.vertx.core.Vertx;
 import io.vertx.core.file.AsyncFile;
 import io.vertx.core.file.OpenOptions;
+import io.vertx.core.json.Json;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.core.logging.Logger;
@@ -28,13 +29,13 @@ public class DataSourceAdapterServiceImpl implements DataSourceAdapterService {
     private String tempFileRootPath;
     private String configManagerApikey;
 
-    public DataSourceAdapterServiceImpl(Vertx vertx, WebClient webClient, int gatewayPort, String gatewayHost, String configManagerApikey, String tempFileRootPath, Handler<AsyncResult<DataSourceAdapterService>> readyHandler) {
+    public DataSourceAdapterServiceImpl(Vertx vertx, WebClient webClient, JsonObject config, String tempFileRootPath, Handler<AsyncResult<DataSourceAdapterService>> readyHandler) {
         this.webClient = webClient;
-        this.configManagerHost = gatewayHost;
-        this.configManagerPort = gatewayPort;
+        this.configManagerHost = config.getString("host");
+        this.configManagerPort = config.getInteger("port");
         this.tempFileRootPath = tempFileRootPath;
         this.vertx = vertx;
-        this.configManagerApikey = configManagerApikey;
+        this.configManagerApikey = config.getString("apikey");
 
         readyHandler.handle(Future.succeededFuture(this));
     }

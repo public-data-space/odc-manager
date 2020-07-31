@@ -3,12 +3,11 @@ package de.fraunhofer.fokus.ids.services;
 import de.fraunhofer.fokus.ids.models.Constants;
 import de.fraunhofer.fokus.ids.persistence.entities.DataAsset;
 import de.fraunhofer.fokus.ids.persistence.managers.DataAssetManager;
-import de.fraunhofer.fokus.ids.persistence.service.DatabaseService;
+import de.fraunhofer.fokus.ids.utils.services.authService.AuthAdapterService;
 import de.fraunhofer.iais.eis.*;
-import de.fraunhofer.iais.eis.util.PlainLiteral;
+import de.fraunhofer.iais.eis.ids.jsonld.Serializer;
 import de.fraunhofer.iais.eis.util.TypedLiteral;
 import io.vertx.core.*;
-import io.vertx.core.buffer.Buffer;
 import io.vertx.core.json.Json;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
@@ -23,15 +22,11 @@ import org.apache.http.entity.mime.content.StringBody;
 import javax.xml.datatype.DatatypeConfigurationException;
 import javax.xml.datatype.DatatypeFactory;
 import javax.xml.datatype.XMLGregorianCalendar;
-import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.net.URL;
 import java.nio.charset.StandardCharsets;
-import java.text.DateFormat;
-import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.List;
 /**
@@ -40,36 +35,24 @@ import java.util.List;
 public class IDSService {
 	private final Logger LOGGER = LoggerFactory.getLogger(IDSService.class.getName());
 
-	private String INFO_MODEL_VERSION = "3.0.0";
-	private String[] SUPPORTED_INFO_MODEL_VERSIONS = {"3.0.0"};
+	private String INFO_MODEL_VERSION = "3.1.0";
+	private String[] SUPPORTED_INFO_MODEL_VERSIONS = {"3.1.0"};
 	private DataAssetManager dataAssetManager;
-	private DatabaseService databaseService;
-
+	private AuthAdapterService authAdapterService;
+	private ConfigService configService;
+    private Serializer serializer = new Serializer();
 	public IDSService(Vertx vertx){
-		dataAssetManager = new DataAssetManager(vertx);
-		databaseService = DatabaseService.createProxy(vertx, Constants.DATABASE_SERVICE);
+		dataAssetManager = new DataAssetManager();
+		authAdapterService = AuthAdapterService.createProxy(vertx, Constants.AUTHADAPTER_SERVICE);
+		configService = new ConfigService(vertx);
 	}
 
-	public void getSelfDescriptionResponse(URI uri, Handler<AsyncResult<DescriptionResponseMessage>> resultHandler) {
-		getConfiguration(config -> {
-			if(config.succeeded()){
-				resultHandler.handle(Future.succeededFuture( buildSelfDescriptionResponse(uri, config.result())));
-			} else {
-				LOGGER.error(config.cause());
-				resultHandler.handle(Future.failedFuture(config.cause()));
-			}
-		});
+	public void getSelfDescriptionResponse(JsonObject config, URI uri, Handler<AsyncResult<DescriptionResponseMessage>> resultHandler) {
+		resultHandler.handle(Future.succeededFuture( buildSelfDescriptionResponse(uri, config)));
 	}
 
-	public void getArtifactResponse(URI uri, Handler<AsyncResult<ArtifactResponseMessage>> resultHandler) {
-		getConfiguration(config -> {
-			if(config.succeeded()){
-				resultHandler.handle(Future.succeededFuture( buildArtifactResponseMessage(uri, config.result())));
-			} else {
-				LOGGER.error(config.cause());
-				resultHandler.handle(Future.failedFuture(config.cause()));
-			}
-		});
+	public void getArtifactResponse(JsonObject config, URI uri, Handler<AsyncResult<ArtifactResponseMessage>> resultHandler) {
+		resultHandler.handle(Future.succeededFuture( buildArtifactResponseMessage(uri, config)));
 	}
 
 	private ArtifactResponseMessage buildArtifactResponseMessage(URI uri, JsonObject config) {
@@ -79,6 +62,10 @@ public class IDSService {
 					._correlationMessage_(uri)
 					._modelVersion_(INFO_MODEL_VERSION)
 					._issuerConnector_(new URI(config.getString("url")+"#Connector"))
+					._securityToken_( new DynamicAttributeTokenBuilder()
+							._tokenFormat_(TokenFormat.JWT)
+							._tokenValue_(config.getString("jwt"))
+							.build())
 					.build();
 		} catch (URISyntaxException e) {
 			LOGGER.error(e);
@@ -97,18 +84,15 @@ public class IDSService {
 		return null;
 	}
 
-	public void createRegistrationMessage(Handler<AsyncResult<ConnectorAvailableMessage>> resultHandler){
-
-		getConfiguration(config -> {
-			if(config.succeeded()){
+	public void createRegistrationMessage(JsonObject config, Handler<AsyncResult<Message>> resultHandler){
 				try {
 					ConnectorAvailableMessage message = new ConnectorAvailableMessageBuilder()
 							._issued_(getDate())
 							._modelVersion_(INFO_MODEL_VERSION)
-							._issuerConnector_(new URI(config.result().getString("url")+"#Connector"))
+							._issuerConnector_(new URI(config.getString("url")+"#Connector"))
 							._securityToken_( new DynamicAttributeTokenBuilder()
 									._tokenFormat_(TokenFormat.JWT)
-									._tokenValue_(getJWT())
+									._tokenValue_(config.getString("jwt"))
 									.build())
 							.build();
 					resultHandler.handle(Future.succeededFuture(message));
@@ -116,25 +100,17 @@ public class IDSService {
 					LOGGER.error(e);
 					resultHandler.handle(Future.failedFuture(e));
 				}
-			} else {
-				LOGGER.error(config.cause());
-				resultHandler.handle(Future.failedFuture(config.cause()));
-			}
-		});
 	}
 
-	public void createUpdateMessage(Handler<AsyncResult<ConnectorUpdateMessage>> resultHandler){
-
-		getConfiguration(config -> {
-			if(config.succeeded()){
+	public void createUpdateMessage(JsonObject config, Handler<AsyncResult<Message>> resultHandler){
 				try {
 					ConnectorUpdateMessage message = new ConnectorUpdateMessageBuilder()
 							._issued_(getDate())
 							._modelVersion_(INFO_MODEL_VERSION)
-							._issuerConnector_(new URI(config.result().getString("url")+"#Connector"))
+							._issuerConnector_(new URI(config.getString("url")+"#Connector"))
 							._securityToken_( new DynamicAttributeTokenBuilder()
 									._tokenFormat_(TokenFormat.JWT)
-									._tokenValue_(getJWT())
+									._tokenValue_(config.getString("jwt"))
 									.build())
 							.build();
 					resultHandler.handle(Future.succeededFuture(message));
@@ -142,25 +118,17 @@ public class IDSService {
 					LOGGER.error(e);
 					resultHandler.handle(Future.failedFuture(e));
 				}
-			} else {
-				LOGGER.error(config.cause());
-				resultHandler.handle(Future.failedFuture(config.cause()));
-			}
-		});
 	}
 
-	public void createUnregistrationMessage(Handler<AsyncResult<ConnectorUnavailableMessage>> resultHandler){
-
-		getConfiguration(config -> {
-			if(config.succeeded()){
+	public void createUnregistrationMessage(JsonObject config, Handler<AsyncResult<Message>> resultHandler){
 				try {
 					ConnectorUnavailableMessage message = new ConnectorUnavailableMessageBuilder()
 							._issued_(getDate())
 							._modelVersion_(INFO_MODEL_VERSION)
-							._issuerConnector_(new URI(config.result().getString("url")+"#Connector"))
+							._issuerConnector_(new URI(config.getString("url")+"#Connector"))
 							._securityToken_( new DynamicAttributeTokenBuilder()
 									._tokenFormat_(TokenFormat.JWT)
-									._tokenValue_(getJWT())
+									._tokenValue_(config.getString("jwt"))
 									.build())
 							.build();
 					resultHandler.handle(Future.succeededFuture(message));
@@ -168,18 +136,10 @@ public class IDSService {
 					LOGGER.error(e);
 					resultHandler.handle(Future.failedFuture(e));
 				}
-			} else {
-				LOGGER.error(config.cause());
-				resultHandler.handle(Future.failedFuture(config.cause()));
-			}
-		});
 	}
 
-	public void getConnector(Handler<AsyncResult<Connector>> resultHandler) {
-
-		getConfiguration(configReply -> {
-			if(configReply.succeeded()) {
-				buildBaseConnector(configReply.result(), reply -> {
+	public void getConnector(JsonObject config, Handler<AsyncResult<Connector>> resultHandler) {
+				buildBaseConnector(config, reply -> {
 					if (reply.succeeded()) {
 						resultHandler.handle(Future.succeededFuture(reply.result()));
 					} else {
@@ -187,12 +147,6 @@ public class IDSService {
 						resultHandler.handle(Future.failedFuture(reply.cause()));
 					}
 				});
-			}
-			else{
-				LOGGER.error("Configuration could not be retrieved.");
-				resultHandler.handle(Future.failedFuture(configReply.cause()));
-			}
-		});
 	}
 
 	private DescriptionResponseMessage buildSelfDescriptionResponse(URI uri, JsonObject config){
@@ -203,6 +157,10 @@ public class IDSService {
 					._correlationMessage_(uri)
 					._modelVersion_(INFO_MODEL_VERSION)
 					._issuerConnector_(new URI(config.getString("url")+"#Connector"))
+					._securityToken_( new DynamicAttributeTokenBuilder()
+							._tokenFormat_(TokenFormat.JWT)
+							._tokenValue_(config.getString("jwt"))
+							.build())
 					.build();
 		} catch (URISyntaxException e) {
 			LOGGER.error(e);
@@ -229,8 +187,7 @@ public class IDSService {
 					//						.build())
 
 					._securityProfile_(SecurityProfile.BASE_CONNECTOR_SECURITY_PROFILE)
-					._title_(new ArrayList<>(Arrays.asList(new PlainLiteral(config.getString("title"), ""))))
-
+					._title_(new ArrayList<>(Arrays.asList(new TypedLiteral(config.getString("title")))))
 					._host_(new ArrayList<>(Arrays.asList(new HostBuilder()
 							._accessUrl_(new URI(config.getString("url")))
 							._protocol_(Protocol.HTTP)
@@ -242,7 +199,7 @@ public class IDSService {
 					//				._componentCertification_(null)
 					//				._physicalLocation_(null);
 
-			catalogFuture.setHandler( ac -> {
+			catalogFuture.onComplete( ac -> {
 				if(ac.succeeded()) {
 					connectorBuilder._catalog_(catalogFuture.result());
 					next.handle(Future.succeededFuture(connectorBuilder.build()));
@@ -263,9 +220,9 @@ public class IDSService {
 
 		Future<List<Resource>> offers = getOfferResources(config);
 		Future<List<Resource>> requests = getRequestResources(config);
-		Future<Catalog> catalog = Future.future();
+		Promise<Catalog> catalog = Promise.promise();
 
-		CompositeFuture.all(offers, requests).setHandler(cf -> {
+		CompositeFuture.all(offers, requests).onComplete(cf -> {
 			if(cf.succeeded()) {
 				try {
 					catalog.complete(new CatalogBuilder(new URI(config.getString("url") + "#Catalog"))
@@ -282,7 +239,7 @@ public class IDSService {
 				catalog.fail(cf.cause());
 			}
 		});
-		return catalog;
+		return catalog.future();
 	}
 
 	private Future<List<Resource>> getRequestResources(JsonObject config) {
@@ -291,12 +248,12 @@ public class IDSService {
 	}
 
 	private Future<List<Resource>> getOfferResources(JsonObject config) {
-		Future<List<Resource>> daFuture = Future.future();
-		findPublished(daList -> createDataResources(config, daList, daFuture));
-		return daFuture;
+		Promise<List<Resource>> daPromise = Promise.promise();
+		findPublished(daList -> createDataResources(config, daList, daPromise));
+		return daPromise.future();
 	}
 
-	private void createDataResources( JsonObject config, AsyncResult<List<DataAsset>> daList, Future<List<Resource>> daFuture) {
+	private void createDataResources( JsonObject config, AsyncResult<List<DataAsset>> daList, Promise<List<Resource>> daPromise) {
 		if(daList.succeeded()) {
 			List<DataAsset> das = daList.result();
 			ArrayList<Resource> offerResources = new ArrayList<>();
@@ -364,7 +321,7 @@ public class IDSService {
 					LOGGER.error( e);
 				}
 			}
-			daFuture.complete(offerResources);
+			daPromise.complete(offerResources);
 		}
 	}
 
@@ -410,16 +367,14 @@ public class IDSService {
 		return endpoints;
 	}
 
-	private XMLGregorianCalendar getDate(Date createdAt) {
+	private XMLGregorianCalendar getDate(java.time.Instant createdAt) {
+
+		GregorianCalendar cal1 = new GregorianCalendar();
+		cal1.setTimeInMillis(createdAt.toEpochMilli());
+
 		try {
-			DateFormat format = new SimpleDateFormat("YYYY-MM-dd'T'HH:mm:ss.SSSSSS");
-			String date = format.format(createdAt);
-
-			GregorianCalendar cal = new GregorianCalendar();
-			cal.setTime(format.parse(date));
-
-			return  DatatypeFactory.newInstance().newXMLGregorianCalendar(cal);
-		} catch (Exception e) {
+			return DatatypeFactory.newInstance().newXMLGregorianCalendar(cal1);
+		} catch (DatatypeConfigurationException e) {
 			LOGGER.error(e);
 		}
 		return null;
@@ -433,40 +388,55 @@ public class IDSService {
 		return keywords.isEmpty()? null : keywords;
 	}
 
-	private void getConfiguration(Handler<AsyncResult<JsonObject>> resultHandler){
+//	private void getConfigurationWithDAT(Handler<AsyncResult<JsonObject>> resultHandler){
+//
+//		configService.getConfigurationWithDAT( reply -> {
+//			if(reply.succeeded()){
+//				if(!reply.result().getString("jwt").isEmpty()) {
+//					authAdapterService.isAuthenticated(reply.result().getString("jwt"), reply2 -> {
+//						if(reply2.succeeded()){
+//							resultHandler.handle(Future.succeededFuture(reply.result()));
+//						} else {
+//							extendConfig(reply, resultHandler);
+//						}
+//					});
+//				} else{
+//					extendConfig(reply, resultHandler);
+//				}
+//			}
+//			else{
+//				resultHandler.handle(Future.failedFuture(reply.cause()));
+//			}
+//		});
+//	}
+//
+//	private void extendConfig(AsyncResult<JsonObject> reply, Handler<AsyncResult<JsonObject>> resultHandler){
+//		getJWT(jwtReply -> {
+//			if (jwtReply.succeeded()) {
+//				JsonObject newConfig = reply.result().put("jwt", jwtReply.result());
+//				resultHandler.handle(Future.succeededFuture(newConfig));
+//				configService.editConfiguration(newConfig, r -> {});
+//
+//			} else {
+//				resultHandler.handle(Future.failedFuture("No JWT retrievable."));
+//			}
+//		});
+//	}
+//
+//	private void getJWT(Handler<AsyncResult<String>> resultHandler){
+//		authAdapterService.retrieveToken(tokenReply -> resultHandler.handle(tokenReply));
+//	}
 
-		databaseService.query("SELECT * FROM configuration", new JsonArray(), reply -> {
-			if(reply.succeeded()){
-				if(reply.result().size() > 0) {
-					resultHandler.handle(Future.succeededFuture(reply.result().get(0)));
-				}
-				else{
-					resultHandler.handle(Future.failedFuture("No config available."));
-				}
-			}
-			else{
-				resultHandler.handle(Future.failedFuture(reply.cause()));
-			}
-		});
-	}
-
-	private String getJWT(){
-		//TODO: implement DAPS and return real token
-		return "abcdefg12";
-	}
-
-	private void createRejectionMessage(URI uri,RejectionReason rejectionReason,Handler<AsyncResult<RejectionMessage>> resultHandler) {
-		getConfiguration(config -> {
-			if(config.succeeded()) {
+	private void createRejectionMessage(JsonObject config, URI uri,RejectionReason rejectionReason,Handler<AsyncResult<RejectionMessage>> resultHandler) {
 				try {
-					RejectionMessage message = new RejectionMessageBuilder(new URI(config.result().getString("url") + "/RejectionMessage/" + UUID.randomUUID()))
+					RejectionMessage message = new RejectionMessageBuilder(new URI(config.getString("url") + "/RejectionMessage/" + UUID.randomUUID()))
 							._correlationMessage_(uri)
 							._issued_(getDate())
 							._modelVersion_(INFO_MODEL_VERSION)
-							._issuerConnector_(new URI(config.result().getString("url")+"#Connector"))
+							._issuerConnector_(new URI(config.getString("url")+"#Connector"))
 							._securityToken_(new DynamicAttributeTokenBuilder()
 									._tokenFormat_(TokenFormat.JWT)
-									._tokenValue_(getJWT())
+									._tokenValue_(config.getString("jwt"))
 									.build())
 							._rejectionReason_(rejectionReason)
 							.build();
@@ -475,11 +445,6 @@ public class IDSService {
 					LOGGER.error(e);
 					resultHandler.handle(Future.failedFuture(e));
 				}
-			} else{
-					LOGGER.error("Configuration could not be retrieved.");
-					resultHandler.handle(Future.failedFuture(config.cause()));
-				}
-			});
 	}
 
 	public void multiPartBuilderForMessage(boolean selfDescription,String header, Object payload, Handler<AsyncResult<HttpEntity>> resultHandler) {
@@ -500,7 +465,7 @@ public class IDSService {
 	}
 
 	public void messageHandling(URI uri,Future<?> future1,Future<?> future2,Handler<AsyncResult<HttpEntity>> resultHandler){
-		CompositeFuture.all(future1, future2).setHandler( reply -> {
+		CompositeFuture.all(future1, future2).onComplete( reply -> {
 			if(reply.succeeded()) {
 				if (future1.result() instanceof DescriptionResponseMessage) {
 					multiPartBuilderForMessage(true, Json.encodePrettily(future1.result()), future2.result(), resultHandler);
@@ -517,18 +482,30 @@ public class IDSService {
 	}
 
 	public void handleRejectionMessage(URI uri,RejectionReason rejectionReason,Handler<AsyncResult<HttpEntity>> resultHandler) {
-		createRejectionMessage(uri,rejectionReason,rejectionMessageAsyncResult -> {
-			if (rejectionMessageAsyncResult.succeeded()) {
-				HttpEntity reject = createMultipartMessage(rejectionMessageAsyncResult.result());
-				resultHandler.handle(Future.succeededFuture(reject));
+		configService.getConfigurationWithDAT(configReply -> {
+			if(configReply.succeeded()) {
+				createRejectionMessage(configReply.result(),uri, rejectionReason, rejectionMessageAsyncResult -> {
+					if (rejectionMessageAsyncResult.succeeded()) {
+						HttpEntity reject = createMultipartMessage(rejectionMessageAsyncResult.result());
+						resultHandler.handle(Future.succeededFuture(reject));
+					} else {
+						resultHandler.handle(Future.failedFuture(rejectionMessageAsyncResult.cause()));
+					}
+				});
 			} else {
-				resultHandler.handle(Future.failedFuture(rejectionMessageAsyncResult.cause()));
+				LOGGER.error(configReply.cause());
+				resultHandler.handle(Future.failedFuture(configReply.cause()));
 			}
 		});
 	}
 
 	private HttpEntity createMultipartMessage(Message message) {
-		ContentBody cb = new StringBody(Json.encodePrettily(message), org.apache.http.entity.ContentType.create("application/json"));
+		ContentBody cb = null;
+		try {
+			cb = new StringBody(serializer.serialize(message), ContentType.create("application/json"));
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
 
 		MultipartEntityBuilder multipartEntityBuilder = MultipartEntityBuilder.create()
 				.setBoundary("msgpart")

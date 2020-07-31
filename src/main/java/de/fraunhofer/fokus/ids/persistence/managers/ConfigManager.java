@@ -1,31 +1,27 @@
 package de.fraunhofer.fokus.ids.persistence.managers;
 
-import de.fraunhofer.fokus.ids.models.Constants;
-import de.fraunhofer.fokus.ids.persistence.service.DatabaseService;
-import de.fraunhofer.fokus.ids.persistence.util.BrokerStatus;
-import de.fraunhofer.fokus.ids.services.BrokerService;
+import de.fraunhofer.fokus.ids.persistence.util.DatabaseConnector;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Future;
 import io.vertx.core.Handler;
-import io.vertx.core.Vertx;
-import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
-
+import io.vertx.sqlclient.Tuple;
+/**
+ * @author Vincent Bohlen, vincent.bohlen@fokus.fraunhofer.de
+ */
 public class ConfigManager {
     private Logger LOGGER = LoggerFactory.getLogger(ConfigManager.class.getName());
 
-    private DatabaseService dbService;
-    private BrokerService brokerService;
+    private DatabaseConnector databaseConnector;
 
-    public ConfigManager(Vertx vertx){
-        this.dbService = DatabaseService.createProxy(vertx, Constants.DATABASE_SERVICE);
-        this.brokerService = new BrokerService(vertx);
+    public ConfigManager(){
+        this.databaseConnector = DatabaseConnector.getInstance();
     }
 
-    public void getConfiguration(Handler<AsyncResult<JsonObject>> resultHandler){
-        dbService.query("SELECT * FROM configuration", new JsonArray(), reply -> {
+    public void get(Handler<AsyncResult<JsonObject>> resultHandler){
+        databaseConnector.query("SELECT * FROM configuration", Tuple.tuple(),reply -> {
             if(reply.succeeded()){
                 if(reply.result().size()>0) {
                     resultHandler.handle(Future.succeededFuture(reply.result().get(0)));
@@ -42,58 +38,23 @@ public class ConfigManager {
         });
     }
 
-    public void editConfiguration(JsonObject json, Handler<AsyncResult<JsonObject>> resultHandler){
-        JsonArray params = new JsonArray()
-                .add(json.getString("title"))
-                .add(json.getString("maintainer"))
-                .add(json.getString("curator"))
-                .add(json.getString("url"))
-                .add(json.getString("country"));
-        getConfiguration(reply -> {
-            if (reply.succeeded()) {
-                brokerService.unsubscribeAll(unsubReply -> {
-                    if (unsubReply.succeeded()) {
-                        params.add(reply.result().getLong("id"));
-                        dbService.query("UPDATE configuration SET title = ?, maintainer = ?, curator = ?, url = ?, country = ? WHERE id = ?", params, reply2 -> {
-                            if (reply2.succeeded()) {
-                                brokerService.subscribeAll(subReply -> {
-                                    if (subReply.succeeded()) {
-                                        JsonObject jO = new JsonObject();
-                                        jO.put("status", "success");
-                                        jO.put("text", "Konfiguration geändert");
-                                        resultHandler.handle(Future.succeededFuture(jO));
-                                    } else {
-                                        JsonObject jO = new JsonObject();
-                                        jO.put("status", "info");
-                                        jO.put("text", "Konfiguration wurde geändert, aber Fehler bei der Brokeranmeldung.");
-                                        resultHandler.handle(Future.succeededFuture(jO));
-                                    }
-                                });
-                            } else {
-                                LOGGER.error(reply2.cause());
-                                resultHandler.handle(Future.failedFuture(reply2.cause()));
-                            }
-                        });
-                    } else {
-                        LOGGER.error(unsubReply.cause());
-                        JsonObject jO = new JsonObject();
-                        jO.put("status", "error");
-                        jO.put("text", "Konfiguration konnte nicht geändert werden.");
-                        resultHandler.handle(Future.succeededFuture(jO));
-                    }
-                });
+    public void edit(Tuple params, Handler<AsyncResult<Void>> resultHandler) {
+        databaseConnector.query("UPDATE configuration SET title = $1, maintainer = $2, curator = $3, url = $4, country = $5, jwt = $6 WHERE id = $7", params, reply -> {
+            if(reply.succeeded()) {
+                resultHandler.handle(Future.succeededFuture());
             } else {
-                dbService.query("INSERT INTO configuration (title, maintainer, curator, url, country) values (?,?,?,?, ?)", params, reply3 -> {
-                    if (reply3.failed()) {
-                        LOGGER.error(reply3.cause());
-                        resultHandler.handle(Future.failedFuture(reply3.cause()));
-                    } else {
-                        JsonObject jO = new JsonObject();
-                        jO.put("status", "success");
-                        jO.put("text", "Konfiguration geändert");
-                        resultHandler.handle(Future.succeededFuture(jO));
-                    }
-                });
+                resultHandler.handle(Future.failedFuture(reply.cause()));
+            }
+        });
+
+    }
+    public void insert(Tuple params, Handler<AsyncResult<Void>> resultHandler){
+        databaseConnector.query("INSERT INTO configuration (title, maintainer, curator, url, country, jwt) values ($1,$2,$3,$4,$5,$6)", params, reply -> {
+            if (reply.failed()) {
+                LOGGER.error(reply.cause());
+                resultHandler.handle(Future.failedFuture(reply.cause()));
+            } else {
+                resultHandler.handle(Future.succeededFuture());
             }
         });
     }

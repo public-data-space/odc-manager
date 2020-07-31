@@ -15,7 +15,7 @@ public class JobController extends AbstractVerticle {
 	private JobManager jobManager;
 
 	public JobController(Vertx vertx){
-		this.jobManager = new JobManager(vertx);
+		this.jobManager = new JobManager();
 	}
 
     public void findAll(Handler<AsyncResult<JsonArray>> resultHandler) {

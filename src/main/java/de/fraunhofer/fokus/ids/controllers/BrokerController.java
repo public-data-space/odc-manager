@@ -1,8 +1,9 @@
 package de.fraunhofer.fokus.ids.controllers;
 
+import de.fraunhofer.fokus.ids.models.Constants;
 import de.fraunhofer.fokus.ids.persistence.managers.BrokerManager;
 import de.fraunhofer.fokus.ids.persistence.util.BrokerStatus;
-import de.fraunhofer.fokus.ids.services.BrokerService;
+import de.fraunhofer.fokus.ids.services.brokerService.BrokerService;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Future;
 import io.vertx.core.Handler;
@@ -24,8 +25,8 @@ public class BrokerController {
     private BrokerService brokerService;
 
     public BrokerController(Vertx vertx){
-        this.brokerManager = new BrokerManager(vertx);
-        this.brokerService = new BrokerService(vertx);
+        this.brokerManager = new BrokerManager();
+        this.brokerService = BrokerService.createProxy(vertx, Constants.BROKER_SERVICE);
     }
 
     public void register(long id, Handler<AsyncResult<JsonObject>> resultHandler){

@@ -1,11 +1,8 @@
 package de.fraunhofer.fokus.ids.controllers;
 
-import de.fraunhofer.fokus.ids.enums.FileType;
-import de.fraunhofer.fokus.ids.messages.ResourceRequest;
 import de.fraunhofer.fokus.ids.models.Constants;
 import de.fraunhofer.fokus.ids.models.DataAssetDescription;
 import de.fraunhofer.fokus.ids.persistence.entities.DataAsset;
-import de.fraunhofer.fokus.ids.persistence.entities.DataSource;
 import de.fraunhofer.fokus.ids.persistence.managers.DataAssetManager;
 import de.fraunhofer.fokus.ids.persistence.managers.DataSourceManager;
 import de.fraunhofer.fokus.ids.persistence.managers.JobManager;
@@ -28,19 +25,22 @@ import java.nio.file.StandardCopyOption;
 import java.util.*;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
-
+/**
+ * @author Hoang Luan Ta, hoang.luan.ta@fokus.fraunhofer.de
+ */
 public class FileUploadController {
-    private Logger LOGGER = LoggerFactory.getLogger(DataAssetController.class.getName());
+    private Logger LOGGER = LoggerFactory.getLogger(FileUploadController.class.getName());
     private DataAssetManager dataAssetManager;
     private DataSourceAdapterService dataSourceAdapterService;
     private DataSourceManager dataSourceManager;
     private JobManager jobManager;
     private BrokerController brokerController;
     private DataAssetController dataAssetController;
+
     public FileUploadController(Vertx vertx) {
-        dataAssetManager = new DataAssetManager(vertx);
-        jobManager = new JobManager(vertx);
-        this.dataSourceManager = new DataSourceManager(vertx);
+        dataAssetManager = new DataAssetManager();
+        jobManager = new JobManager();
+        this.dataSourceManager = new DataSourceManager();
         dataSourceAdapterService = DataSourceAdapterService.createProxy(vertx, Constants.DATASOURCEADAPTER_SERVICE);
         brokerController = new BrokerController(vertx);
         dataAssetController = new DataAssetController(vertx);

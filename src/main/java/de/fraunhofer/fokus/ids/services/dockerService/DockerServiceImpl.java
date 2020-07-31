@@ -9,7 +9,9 @@ import io.vertx.core.json.JsonObject;
 import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
 import io.vertx.ext.web.client.WebClient;
-
+/**
+ * @author Vincent Bohlen, vincent.bohlen@fokus.fraunhofer.de
+ */
 public class DockerServiceImpl implements DockerService {
     private Logger LOGGER = LoggerFactory.getLogger(DockerServiceImpl.class.getName());
 
@@ -18,11 +20,11 @@ public class DockerServiceImpl implements DockerService {
     private String configManagerHost;
     private String configManagerApikey;
 
-    public DockerServiceImpl(WebClient webClient, int gatewayPort, String gatewayHost, String configManagerApikey, Handler<AsyncResult<DockerService>> readyHandler) {
+    public DockerServiceImpl(WebClient webClient,JsonObject config, Handler<AsyncResult<DockerService>> readyHandler) {
         this.webClient = webClient;
-        this.configManagerHost = gatewayHost;
-        this.configManagerPort = gatewayPort;
-        this.configManagerApikey = configManagerApikey;
+        this.configManagerHost = config.getString("host");
+        this.configManagerPort = config.getInteger("port");
+        this.configManagerApikey = config.getString("apikey");
 
         readyHandler.handle(Future.succeededFuture(this));
     }
