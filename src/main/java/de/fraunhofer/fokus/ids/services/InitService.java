@@ -36,6 +36,47 @@ public class InitService{
 	private final String BROKER_TABLE_CREATE_QUERY = "CREATE TABLE IF NOT EXISTS broker (id SERIAL, created_at TIMESTAMP, updated_at TIMESTAMP, url TEXT, status TEXT)";
 	private final String CONFIGURATION_TABLE_CREATE_QUERY = "CREATE TABLE IF NOT EXISTS configuration (id SERIAL, country TEXT, url TEXT, maintainer TEXT, curator TEXT, title TEXT, jwt TEXT)";
 
+	private final JsonObject user = new JsonObject().put("id","SERIAL")
+			.put("created_at","TIMESTAMP")
+			.put("updated_at","TIMESTAMP")
+			.put("username","TEXT")
+			.put("password","TEXT");
+
+	private final JsonObject dataasset = new JsonObject().put("id","SERIAL").put("created_at","TIMESTAMP")
+			.put("updated_at","TIMESTAMP").put("datasetid","TEXT").put("name","TEXT")
+			.put("url","TEXT").put("format","TEXT").put("licenseurl","TEXT").put("licensetitle","TEXT").put("datasettitle","TEXT")
+			.put("datasetnotes","TEXT").put("orignalresourceurl","TEXT")
+			.put("orignaldataseturl","TEXT").put("signature","TEXT").put("status","INTEGER").put("resourceid","TEXT")
+			.put("tags","TEXT[]").put("datasetdescription","TEXT").put("organizationtitle","TEXT")
+			.put("organizationdescription","TEXT").put("version","TEXT").put("organizationdescription","TEXT")
+			.put("testcolumn3","TEXT")
+			.put("sourceid","TEXT");
+
+	private final JsonObject datasource = new JsonObject().put("id","SERIAL")
+			.put("created_at","TIMESTAMP")
+			.put("updated_at","TIMESTAMP")
+			.put("datasourcename","TEXT")
+			.put("data","JSONB")
+			.put("datasourcetype","TEXT");
+	private final JsonObject job = new JsonObject().put("id","SERIAL")
+			.put("created_at","TIMESTAMP")
+			.put("updated_at","TIMESTAMP")
+			.put("data","JSONB")
+			.put("status","INTEGER")
+			.put("sourceid","BIGINT")
+			.put("sourcetype","TEXT");
+	private final JsonObject broker = new JsonObject().put("id","SERIAL")
+			.put("created_at","TIMESTAMP")
+			.put("updated_at","TIMESTAMP")
+			.put("url","TEXT")
+			.put("status","TEXT");
+	private final JsonObject configuration = new JsonObject().put("id","SERIAL")
+			.put("country","TEXT")
+			.put("url","TEXT")
+			.put("maintainer","TEXT")
+			.put("curator","TEXT")
+			.put("title","TEXT");
+
 	public InitService(Vertx vertx){
 		this.vertx = vertx;
 	}
@@ -58,10 +99,10 @@ public class InitService{
 		});
 	}
 
-	private Future<List<JsonObject>> performUpdate(String query){
+	private Future<List<JsonObject>> performUpdate(JsonObject query,String tablename){
 		Promise<List<JsonObject>> queryPromise = Promise.promise();
 		Future<List<JsonObject>> queryFuture = queryPromise.future();
-		DatabaseConnector.getInstance().query(query, Tuple.tuple(), queryFuture);
+		DatabaseConnector.getInstance().initTable(query,tablename, queryFuture.completer());
 		return queryFuture;
 	}
 
@@ -78,12 +119,12 @@ public class InitService{
 	private void initTables(Handler<AsyncResult<Void>> resultHandler){
 
 		ArrayList<Future> list = new ArrayList<Future>() {{
-			performUpdate(USER_TABLE_CREATE_QUERY);
-			performUpdate(DATAASSET_TABLE_CREATE_QUERY);
-			performUpdate(DATASOURCE_TABLE_CREATE_QUERY);
-			performUpdate(BROKER_TABLE_CREATE_QUERY);
-			performUpdate(JOB_TABLE_CREATE_QUERY);
-			performUpdate(CONFIGURATION_TABLE_CREATE_QUERY);
+            performUpdate(user,"public.user"),
+                    performUpdate(dataasset,"dataasset"),
+                    performUpdate(datasource,"datasource"),
+                    performUpdate(broker,"broker"),
+                    performUpdate(job,"job"),
+                    performUpdate(configuration,"configuration")
 		}};
 
 		CompositeFuture.all(list).onComplete( reply -> {
