@@ -30,7 +30,7 @@ public class DataAssetManager {
 	private static final String ADD_UPDATE = "Update DataAsset SET updated_at = NOW(), datasetid = $1, name = $2, url = $3,"
 			+ " format = $4, licenseurl = $5, licensetitle = $6, datasettitle = $7, datasetnotes = $8, orignalresourceurl = $9,"
 			+ " orignaldataseturl = $10, signature = $11, status = $12, resourceid = $13, tags = $14, datasetdescription = $15,"
-			+ " organizationtitle = $16, organizationdescription = $17, version = $18, sourceid = $19 WHERE id = $20";
+			+ " organizationtitle = $16, organizationdescription = $17, version = $18, sourceid = $19, filename = $20 WHERE id = $21";
 	private static final String DELETE_UPDATE = "DELETE FROM dataasset WHERE id = $1";
 
 	public DataAssetManager() {
@@ -142,7 +142,8 @@ public class DataAssetManager {
 				.addString(checkNull(dataAsset.getOrganizationDescription()))
 				.addString(checkNull(dataAsset.getVersion()))
 				.addString(checkNull(dataAsset.getSourceID().toString()))
-				.addLong(dataAsset.getId());
+                .addString(checkNull(dataAsset.getFilename()))
+                .addLong(dataAsset.getId());
 
 		databaseConnector.query(ADD_UPDATE,params, reply -> {
 			if (reply.failed()) {

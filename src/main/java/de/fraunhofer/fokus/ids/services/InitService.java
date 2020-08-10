@@ -5,13 +5,9 @@ import io.vertx.config.ConfigRetriever;
 import io.vertx.config.ConfigRetrieverOptions;
 import io.vertx.config.ConfigStoreOptions;
 import io.vertx.core.*;
-import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
-import io.vertx.pgclient.PgPool;
-import io.vertx.sqlclient.Row;
-import io.vertx.sqlclient.RowSet;
 import io.vertx.sqlclient.Tuple;
 import org.mindrot.jbcrypt.BCrypt;
 
@@ -43,7 +39,8 @@ public class InitService{
 			.put("orignaldataseturl","TEXT").put("signature","TEXT").put("status","INTEGER").put("resourceid","TEXT")
 			.put("tags","TEXT[]").put("datasetdescription","TEXT").put("organizationtitle","TEXT")
 			.put("organizationdescription","TEXT").put("version","TEXT").put("organizationdescription","TEXT")
-			.put("sourceid","TEXT");
+            .put("sourceid","TEXT")
+            .put("filename", "TEXT");
 
 	private final JsonObject datasource = new JsonObject().put("id","SERIAL")
 			.put("created_at","TIMESTAMP")

@@ -107,7 +107,6 @@ public class DataAssetController {
     }
 
     private void initiateDataAssetCreation(Handler<AsyncResult<DataAsset>> next, DataAssetDescription dataAssetDescription) {
-
         dataAssetManager.addInitial(initCreateReply -> {
             if (initCreateReply.succeeded()) {
                 if (dataAssetDescription.getDatasourcetype().equals("File Upload")){
@@ -151,7 +150,6 @@ public class DataAssetController {
                             mes.setData(new JsonObject(dataAssetDescription.getData()));
                             mes.setDataSource(dataSource);
                             mes.setDataAssetId(initCreateReply.result());
-
                             dataSourceAdapterService.createDataAsset(dataSource.getDatasourceType(), new JsonObject(Json.encode(mes)), dataAssetCreateReply -> {
                                 if (dataAssetCreateReply.succeeded()) {
                                     if (dataAssetCreateReply.result() == null) {
@@ -172,6 +170,18 @@ public class DataAssetController {
             } else {
                 LOGGER.error(initCreateReply.cause());
                 next.handle(Future.failedFuture(initCreateReply.cause()));
+            }
+        });
+    }
+
+    public void getFileName(Long id, Handler<AsyncResult<String>> result){
+        dataAssetManager.findById(id,jsonObjectAsyncResult -> {
+            if (jsonObjectAsyncResult.succeeded()){
+                DataAsset dataAsset = Json.decodeValue(jsonObjectAsyncResult.result().toString(), DataAsset.class);
+                result.handle(Future.succeededFuture(dataAsset.getFilename()));
+            }
+            else {
+                result.handle(Future.failedFuture(jsonObjectAsyncResult.cause()));
             }
         });
     }
