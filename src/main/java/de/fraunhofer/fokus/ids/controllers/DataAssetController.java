@@ -181,6 +181,7 @@ public class DataAssetController {
                 result.handle(Future.succeededFuture(dataAsset.getFilename()));
             }
             else {
+                LOGGER.error(jsonObjectAsyncResult.cause());
                 result.handle(Future.failedFuture(jsonObjectAsyncResult.cause()));
             }
         });

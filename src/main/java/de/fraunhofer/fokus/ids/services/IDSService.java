@@ -1,9 +1,7 @@
 package de.fraunhofer.fokus.ids.services;
 
-import de.fraunhofer.fokus.ids.models.Constants;
 import de.fraunhofer.fokus.ids.persistence.entities.DataAsset;
 import de.fraunhofer.fokus.ids.persistence.managers.DataAssetManager;
-import de.fraunhofer.fokus.ids.utils.services.authService.AuthAdapterService;
 import de.fraunhofer.iais.eis.*;
 import de.fraunhofer.iais.eis.ids.jsonld.Serializer;
 import de.fraunhofer.iais.eis.util.TypedLiteral;
@@ -38,20 +36,18 @@ public class IDSService {
 	private String INFO_MODEL_VERSION = "3.1.0";
 	private String[] SUPPORTED_INFO_MODEL_VERSIONS = {"3.1.0"};
 	private DataAssetManager dataAssetManager;
-	private AuthAdapterService authAdapterService;
 	private ConfigService configService;
     private Serializer serializer = new Serializer();
 	public IDSService(Vertx vertx){
 		dataAssetManager = new DataAssetManager();
-		authAdapterService = AuthAdapterService.createProxy(vertx, Constants.AUTHADAPTER_SERVICE);
 		configService = new ConfigService(vertx);
 	}
 
-	public void getSelfDescriptionResponse(JsonObject config, URI uri, Handler<AsyncResult<DescriptionResponseMessage>> resultHandler) {
+	public void getSelfDescriptionResponse(JsonObject config, URI uri, Handler<AsyncResult<Message>> resultHandler) {
 		resultHandler.handle(Future.succeededFuture( buildSelfDescriptionResponse(uri, config)));
 	}
 
-	public void getArtifactResponse(JsonObject config, URI uri, Handler<AsyncResult<ArtifactResponseMessage>> resultHandler) {
+	public void getArtifactResponse(JsonObject config, URI uri, Handler<AsyncResult<Message>> resultHandler) {
 		resultHandler.handle(Future.succeededFuture( buildArtifactResponseMessage(uri, config)));
 	}
 
@@ -388,45 +384,6 @@ public class IDSService {
 		return keywords.isEmpty()? null : keywords;
 	}
 
-//	private void getConfigurationWithDAT(Handler<AsyncResult<JsonObject>> resultHandler){
-//
-//		configService.getConfigurationWithDAT( reply -> {
-//			if(reply.succeeded()){
-//				if(!reply.result().getString("jwt").isEmpty()) {
-//					authAdapterService.isAuthenticated(reply.result().getString("jwt"), reply2 -> {
-//						if(reply2.succeeded()){
-//							resultHandler.handle(Future.succeededFuture(reply.result()));
-//						} else {
-//							extendConfig(reply, resultHandler);
-//						}
-//					});
-//				} else{
-//					extendConfig(reply, resultHandler);
-//				}
-//			}
-//			else{
-//				resultHandler.handle(Future.failedFuture(reply.cause()));
-//			}
-//		});
-//	}
-//
-//	private void extendConfig(AsyncResult<JsonObject> reply, Handler<AsyncResult<JsonObject>> resultHandler){
-//		getJWT(jwtReply -> {
-//			if (jwtReply.succeeded()) {
-//				JsonObject newConfig = reply.result().put("jwt", jwtReply.result());
-//				resultHandler.handle(Future.succeededFuture(newConfig));
-//				configService.editConfiguration(newConfig, r -> {});
-//
-//			} else {
-//				resultHandler.handle(Future.failedFuture("No JWT retrievable."));
-//			}
-//		});
-//	}
-//
-//	private void getJWT(Handler<AsyncResult<String>> resultHandler){
-//		authAdapterService.retrieveToken(tokenReply -> resultHandler.handle(tokenReply));
-//	}
-
 	private void createRejectionMessage(JsonObject config, URI uri,RejectionReason rejectionReason,Handler<AsyncResult<RejectionMessage>> resultHandler) {
 				try {
 					RejectionMessage message = new RejectionMessageBuilder(new URI(config.getString("url") + "/RejectionMessage/" + UUID.randomUUID()))
@@ -447,36 +404,60 @@ public class IDSService {
 				}
 	}
 
-	public void multiPartBuilderForMessage(boolean selfDescription,String header, Object payload, Handler<AsyncResult<HttpEntity>> resultHandler) {
-		MultipartEntityBuilder multipartEntityBuilder = MultipartEntityBuilder.create()
-				.setBoundary("msgpart");
-		if (selfDescription) {
-			multipartEntityBuilder.setCharset(StandardCharsets.UTF_8)
-					.setContentType(ContentType.APPLICATION_JSON)
-					.addPart("header", new StringBody(header, org.apache.http.entity.ContentType.create("application/json")))
-					.addPart("payload",new StringBody(Json.encodePrettily(payload), org.apache.http.entity.ContentType.create("application/json")));
-		}
-		else{
-			multipartEntityBuilder.setBoundary("msgpart")
-					.addTextBody("header", header)
-					.addBinaryBody("payload", (File) payload);
-		}
-			resultHandler.handle(Future.succeededFuture(multipartEntityBuilder.build()));
-	}
-
-	public void messageHandling(URI uri,Future<?> future1,Future<?> future2,Handler<AsyncResult<HttpEntity>> resultHandler){
-		CompositeFuture.all(future1, future2).onComplete( reply -> {
+	public void handleDataMessage(URI uri, Future<Message> header, Future payload, long assetId, Handler<AsyncResult<HttpEntity>> resultHandler) {
+		CompositeFuture.all(header,payload).onComplete( reply -> {
 			if(reply.succeeded()) {
-				if (future1.result() instanceof DescriptionResponseMessage) {
-					multiPartBuilderForMessage(true, Json.encodePrettily(future1.result()), future2.result(), resultHandler);
-				}
-				else{
-					multiPartBuilderForMessage(false, Json.encodePrettily(future1.result()), future2.result(), resultHandler);
-				}
-			}
-			else{
+				getFileName(assetId, fileNameReply -> {
+					if(fileNameReply.succeeded()) {
+						MultipartEntityBuilder multipartEntityBuilder = MultipartEntityBuilder.create()
+								.setBoundary("msgpart")
+								.addPart("header", new StringBody(Json.encodePrettily(header.result()), org.apache.http.entity.ContentType.create("application/json")))
+								.addBinaryBody("payload", (File) payload.result(), ContentType.create("application/octet-stream"), fileNameReply.result());
+						resultHandler.handle(Future.succeededFuture(multipartEntityBuilder.build()));
+						((File) payload.result()).delete();
+					} else {
+						MultipartEntityBuilder multipartEntityBuilder = MultipartEntityBuilder.create()
+								.setBoundary("msgpart")
+								.addPart("header", new StringBody(Json.encodePrettily(header.result()), org.apache.http.entity.ContentType.create("application/json")))
+								.addBinaryBody("payload", (File) payload.result(), ContentType.create("application/octet-stream"), UUID.randomUUID().toString());
+						resultHandler.handle(Future.succeededFuture(multipartEntityBuilder.build()));
+						((File) payload.result()).delete();
+					}
+				});
+			}else{
 				handleRejectionMessage(uri,RejectionReason.INTERNAL_RECIPIENT_ERROR,resultHandler);
 				LOGGER.error(reply.cause());
+				}
+			});
+	}
+
+	public void handleAbouMessage(URI uri, Future<Message> header, Future<Connector> payload, Handler<AsyncResult<HttpEntity>> resultHandler) {
+		CompositeFuture.all(header, payload).onComplete( reply -> {
+			if (reply.succeeded()) {
+				MultipartEntityBuilder multipartEntityBuilder = MultipartEntityBuilder.create()
+						.setBoundary("msgpart")
+						.setCharset(StandardCharsets.UTF_8)
+						.setContentType(ContentType.APPLICATION_JSON)
+						.addPart("header", new StringBody(Json.encodePrettily(header.result()), org.apache.http.entity.ContentType.create("application/json")))
+						.addPart("payload", new StringBody(Json.encodePrettily(payload.result()), org.apache.http.entity.ContentType.create("application/json")));
+				resultHandler.handle(Future.succeededFuture(multipartEntityBuilder.build()));
+
+			} else {
+				handleRejectionMessage(uri, RejectionReason.INTERNAL_RECIPIENT_ERROR, resultHandler);
+				LOGGER.error(reply.cause());
+			}
+		});
+	}
+
+	public void getFileName(Long id, Handler<AsyncResult<String>> result){
+		dataAssetManager.findById(id,jsonObjectAsyncResult -> {
+			if (jsonObjectAsyncResult.succeeded()){
+				DataAsset dataAsset = Json.decodeValue(jsonObjectAsyncResult.result().toString(), DataAsset.class);
+				result.handle(Future.succeededFuture(dataAsset.getFilename()));
+			}
+			else {
+				LOGGER.error(jsonObjectAsyncResult.cause());
+				result.handle(Future.failedFuture(jsonObjectAsyncResult.cause()));
 			}
 		});
 	}

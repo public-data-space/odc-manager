@@ -58,8 +58,8 @@ public class ConnectorController {
 		String idStr = path.substring(path.lastIndexOf('/') + 1);
 		long id = Long.parseLong(idStr);
 
-		Promise<ArtifactResponseMessage> artifactResponsePromise = Promise.promise();
-		Future<ArtifactResponseMessage> artifactResponseFuture = artifactResponsePromise.future();
+		Promise<Message> artifactResponsePromise = Promise.promise();
+		Future<Message> artifactResponseFuture = artifactResponsePromise.future();
 		configService.getConfigurationWithDAT(reply -> {
 			if(reply.succeeded()) {
 				idsService.getArtifactResponse(reply.result(),header.getId(), artifactResponseFuture);
@@ -71,7 +71,7 @@ public class ConnectorController {
 		Promise<File> filePromise = Promise.promise();
 		Future<File> fileFuture = filePromise.future();
 		payload(id, extension, fileFuture);
-		idsService.messageHandling(header.getId(),artifactResponseFuture,fileFuture,resultHandler);
+		idsService.handleDataMessage(header.getId(), artifactResponseFuture, fileFuture, id, resultHandler);
 	}
 
 	public void payload(long id, String extension, Handler<AsyncResult<File>> resultHandler) {
@@ -142,8 +142,8 @@ public class ConnectorController {
 	public void multiPartAbout(Message header, Handler<AsyncResult<HttpEntity>> resultHandler) {
 		Promise<Connector> connectorPromise = Promise.promise();
 		Future<Connector> connectorFuture = connectorPromise.future();
-		Promise<DescriptionResponseMessage> responsePromise = Promise.promise();
-		Future<DescriptionResponseMessage> responseFuture = responsePromise.future();
+		Promise<Message> responsePromise = Promise.promise();
+		Future<Message> responseFuture = responsePromise.future();
 
 		configService.getConfigurationWithDAT(reply -> {
 			if(reply.succeeded()) {
@@ -155,7 +155,7 @@ public class ConnectorController {
 				responsePromise.fail(reply.cause());
 			}
 		});
-		idsService.messageHandling(header.getId(), responseFuture, connectorFuture, resultHandler);
+		idsService.handleAbouMessage(header.getId(), responseFuture, connectorFuture, resultHandler);
 	}
 
 	public void about(Handler<AsyncResult<String>> resultHandler) {
