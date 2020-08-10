@@ -29,12 +29,6 @@ public class InitService{
 
 	private final String ADMIN_CREATE_QUERY = "INSERT INTO public.user(created_at, updated_at, username, password) SELECT NOW(), NOW(), $1, $2 WHERE NOT EXISTS ( SELECT 1 FROM public.user WHERE username=$1)";
 	private final String DATASOURCEFILEUPLOAD_CREATE_QUERY = "INSERT INTO datasource(created_at, updated_at, datasourcename,data, datasourcetype) SELECT NOW(), NOW(), $1, $2 ,$3 WHERE NOT EXISTS ( SELECT 1 FROM datasource WHERE datasourcetype=$3)";
-	private final String USER_TABLE_CREATE_QUERY = "CREATE TABLE IF NOT EXISTS public.user (id SERIAL , created_at TIMESTAMP , updated_at TIMESTAMP , username TEXT, password TEXT)";
-	private final String DATAASSET_TABLE_CREATE_QUERY = "CREATE TABLE IF NOT EXISTS dataasset (id SERIAL, created_at TIMESTAMP, updated_at TIMESTAMP, datasetid TEXT, name TEXT, url TEXT, format TEXT, licenseurl TEXT, licensetitle TEXT, datasettitle TEXT, datasetnotes TEXT, orignalresourceurl TEXT, orignaldataseturl TEXT, signature TEXT, status INTEGER, resourceid TEXT, tags TEXT[] , datasetdescription TEXT, organizationtitle TEXT, organizationdescription TEXT, version TEXT, sourceid TEXT)";
-	private final String DATASOURCE_TABLE_CREATE_QUERY = "CREATE TABLE IF NOT EXISTS datasource (id SERIAL, created_at TIMESTAMP, updated_at TIMESTAMP, datasourcename TEXT, data JSONB, datasourcetype TEXT)";
-	private final String JOB_TABLE_CREATE_QUERY = "CREATE TABLE IF NOT EXISTS job (id SERIAL, created_at TIMESTAMP, updated_at TIMESTAMP, data JSONB, status INTEGER, sourceid BIGINT, sourcetype TEXT)";
-	private final String BROKER_TABLE_CREATE_QUERY = "CREATE TABLE IF NOT EXISTS broker (id SERIAL, created_at TIMESTAMP, updated_at TIMESTAMP, url TEXT, status TEXT)";
-	private final String CONFIGURATION_TABLE_CREATE_QUERY = "CREATE TABLE IF NOT EXISTS configuration (id SERIAL, country TEXT, url TEXT, maintainer TEXT, curator TEXT, title TEXT, jwt TEXT)";
 
 	private final JsonObject user = new JsonObject().put("id","SERIAL")
 			.put("created_at","TIMESTAMP")
@@ -49,7 +43,6 @@ public class InitService{
 			.put("orignaldataseturl","TEXT").put("signature","TEXT").put("status","INTEGER").put("resourceid","TEXT")
 			.put("tags","TEXT[]").put("datasetdescription","TEXT").put("organizationtitle","TEXT")
 			.put("organizationdescription","TEXT").put("version","TEXT").put("organizationdescription","TEXT")
-			.put("testcolumn3","TEXT")
 			.put("sourceid","TEXT");
 
 	private final JsonObject datasource = new JsonObject().put("id","SERIAL")
@@ -75,7 +68,8 @@ public class InitService{
 			.put("url","TEXT")
 			.put("maintainer","TEXT")
 			.put("curator","TEXT")
-			.put("title","TEXT");
+			.put("title","TEXT")
+			.put("jwt","TEXT");
 
 	public InitService(Vertx vertx){
 		this.vertx = vertx;
@@ -102,7 +96,7 @@ public class InitService{
 	private Future<List<JsonObject>> performUpdate(JsonObject query,String tablename){
 		Promise<List<JsonObject>> queryPromise = Promise.promise();
 		Future<List<JsonObject>> queryFuture = queryPromise.future();
-		DatabaseConnector.getInstance().initTable(query,tablename, queryFuture.completer());
+		DatabaseConnector.getInstance().initTable(query,tablename, queryFuture);
 		return queryFuture;
 	}
 
@@ -119,12 +113,12 @@ public class InitService{
 	private void initTables(Handler<AsyncResult<Void>> resultHandler){
 
 		ArrayList<Future> list = new ArrayList<Future>() {{
-            performUpdate(user,"public.user"),
-                    performUpdate(dataasset,"dataasset"),
-                    performUpdate(datasource,"datasource"),
-                    performUpdate(broker,"broker"),
-                    performUpdate(job,"job"),
-                    performUpdate(configuration,"configuration")
+            performUpdate(user,"public.user");
+            performUpdate(dataasset,"dataasset");
+            performUpdate(datasource,"datasource");
+            performUpdate(broker,"broker");
+            performUpdate(job,"job");
+            performUpdate(configuration,"configuration");
 		}};
 
 		CompositeFuture.all(list).onComplete( reply -> {
