@@ -407,18 +407,29 @@ public class IDSService {
 	public void handleDataMessage(URI uri, Future<Message> header, Future payload, long assetId, Handler<AsyncResult<HttpEntity>> resultHandler) {
 		CompositeFuture.all(header,payload).onComplete( reply -> {
 			if(reply.succeeded()) {
+				String message = null;
+
+				try {
+					message = serializer.serialize(header.result());
+				} catch (IOException e) {
+					LOGGER.error(e);
+					handleRejectionMessage(uri, RejectionReason.INTERNAL_RECIPIENT_ERROR, resultHandler);
+				}
+				final String finalMessage = message;
 				getFileName(assetId, fileNameReply -> {
 					if(fileNameReply.succeeded()) {
 						MultipartEntityBuilder multipartEntityBuilder = MultipartEntityBuilder.create()
-								.setBoundary("msgpart")
-								.addPart("header", new StringBody(Json.encodePrettily(header.result()), org.apache.http.entity.ContentType.create("application/json")))
+								.setCharset(StandardCharsets.UTF_8)
+								.setContentType(ContentType.MULTIPART_FORM_DATA)
+								.addPart("header", new StringBody(finalMessage, org.apache.http.entity.ContentType.create("application/json")))
 								.addBinaryBody("payload", (File) payload.result(), ContentType.create("application/octet-stream"), fileNameReply.result());
 						resultHandler.handle(Future.succeededFuture(multipartEntityBuilder.build()));
 						((File) payload.result()).delete();
 					} else {
 						MultipartEntityBuilder multipartEntityBuilder = MultipartEntityBuilder.create()
-								.setBoundary("msgpart")
-								.addPart("header", new StringBody(Json.encodePrettily(header.result()), org.apache.http.entity.ContentType.create("application/json")))
+								.setCharset(StandardCharsets.UTF_8)
+								.setContentType(ContentType.MULTIPART_FORM_DATA)
+								.addPart("header", new StringBody(finalMessage, org.apache.http.entity.ContentType.create("application/json")))
 								.addBinaryBody("payload", (File) payload.result(), ContentType.create("application/octet-stream"), UUID.randomUUID().toString());
 						resultHandler.handle(Future.succeededFuture(multipartEntityBuilder.build()));
 						((File) payload.result()).delete();
@@ -434,11 +445,23 @@ public class IDSService {
 	public void handleAbouMessage(URI uri, Future<Message> header, Future<Connector> payload, Handler<AsyncResult<HttpEntity>> resultHandler) {
 		CompositeFuture.all(header, payload).onComplete( reply -> {
 			if (reply.succeeded()) {
+
+                String message = null;
+                String connector = null;
+
+                try {
+                    message = serializer.serialize(header.result());
+                    connector = serializer.serialize(payload.result());
+                } catch (IOException e) {
+                   LOGGER.error(e);
+                    handleRejectionMessage(uri, RejectionReason.INTERNAL_RECIPIENT_ERROR, resultHandler);
+                }
+
 				MultipartEntityBuilder multipartEntityBuilder = MultipartEntityBuilder.create()
 						.setCharset(StandardCharsets.UTF_8)
 						.setContentType(ContentType.MULTIPART_FORM_DATA)
-						.addPart("header", new StringBody(Json.encodePrettily(header.result()), org.apache.http.entity.ContentType.create("application/json")))
-						.addPart("payload", new StringBody(Json.encodePrettily(payload.result()), org.apache.http.entity.ContentType.create("application/json")));
+						.addPart("header", new StringBody(message, org.apache.http.entity.ContentType.create("application/json")))
+						.addPart("payload", new StringBody(connector, org.apache.http.entity.ContentType.create("application/json")));
 				resultHandler.handle(Future.succeededFuture(multipartEntityBuilder.build()));
 
 			} else {
