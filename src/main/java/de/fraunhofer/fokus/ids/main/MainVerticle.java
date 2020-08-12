@@ -375,7 +375,7 @@ public class MainVerticle extends AbstractVerticle{
 			if(result.result() != null) {
 				try(ByteArrayOutputStream baos = new ByteArrayOutputStream()){
 					Header contentTypeHeader =  result.result().getContentType();
-					IOUtils.copy(result.result().getContent(), baos);
+					result.result().writeTo(baos);
 					response.putHeader(contentTypeHeader.getName(), contentTypeHeader.getValue());
 					response.end(Buffer.buffer(baos.toByteArray()));
 				} catch (IOException e) {
