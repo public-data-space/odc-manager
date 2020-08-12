@@ -12,7 +12,7 @@ import de.fraunhofer.fokus.ids.persistence.managers.DataSourceManager;
 import de.fraunhofer.fokus.ids.services.ConfigService;
 import de.fraunhofer.fokus.ids.services.IDSService;
 import de.fraunhofer.fokus.ids.services.datasourceAdapter.DataSourceAdapterService;
-import de.fraunhofer.fokus.ids.utils.IDSMessageParser;
+import de.fraunhofer.fokus.ids.utils.models.IDSMessage;
 import de.fraunhofer.fokus.ids.utils.services.authService.AuthAdapterService;
 import de.fraunhofer.iais.eis.*;
 import io.vertx.core.*;
@@ -25,7 +25,9 @@ import org.apache.http.HttpEntity;
 
 import java.io.*;
 import java.net.URI;
+import java.net.URISyntaxException;
 import java.text.ParseException;
+import java.util.Optional;
 
 /**
  * @author Vincent Bohlen, vincent.bohlen@fokus.fraunhofer.de
@@ -94,49 +96,43 @@ public class ConnectorController {
 		}
 	}
 
-	private Message getHeader(String input,Handler<AsyncResult<HttpEntity>> resultHandler){
-		Message header = IDSMessageParser.parse(input).get().getHeader().get();
-		if (header == null) {
-			try {
-				idsService.handleRejectionMessage(new URI(String.valueOf(RejectionReason.MALFORMED_MESSAGE)), RejectionReason.MALFORMED_MESSAGE, resultHandler);
-			} catch (Exception e) {
-				e.printStackTrace();
-			}
-		}
-		return header;
-	}
-
-	public void checkMessage(String input, Class clazz, Handler<AsyncResult<HttpEntity>> resultHandler) {
-		Message header = getHeader(input, resultHandler);
-		if (clazz.isInstance(header)) {
-			routeMessage(header, resultHandler);
-		} else {
-			idsService.handleRejectionMessage(header.getId(),RejectionReason.MALFORMED_MESSAGE,resultHandler);
-		}
-	}
-
-	private void routeMessage(Message header, Handler<AsyncResult<HttpEntity>> resultHandler){
-			if (header == null) {
-				idsService.handleRejectionMessage(header.getId(),RejectionReason.MALFORMED_MESSAGE,resultHandler);
+	public void checkMessage(Optional<IDSMessage> input, Class clazz, Handler<AsyncResult<HttpEntity>> resultHandler) {
+		if (input.isPresent() && input.get().getHeader().isPresent()) {
+			Message header = input.get().getHeader().get();
+			if (clazz.isInstance(header)) {
+				routeMessage(input, resultHandler);
 			} else {
-				authAdapterService.isAuthenticated(header.getSecurityToken().getTokenValue(), authreply -> {
-					if(authreply.succeeded()) {
-						if (header instanceof DescriptionRequestMessage) {
-							multiPartAbout(header, resultHandler);
-						} else if (header instanceof ArtifactRequestMessage) {
-							data(header, "", resultHandler);
-						} else {
-							idsService.handleRejectionMessage(header.getId(), RejectionReason.MESSAGE_TYPE_NOT_SUPPORTED, resultHandler);
-						}
-					} else {
-						idsService.handleRejectionMessage(header.getId(), RejectionReason.NOT_AUTHENTICATED, resultHandler);
-					}
-				});
+				idsService.handleRejectionMessage(header.getId(), RejectionReason.MALFORMED_MESSAGE, resultHandler);
 			}
+		}
 	}
 
-	public void routeMessage(String input, Handler<AsyncResult<HttpEntity>> resultHandler) {
-		routeMessage(IDSMessageParser.parse(input).get().getHeader().get(), resultHandler);
+	public void routeMessage(Optional<IDSMessage> input, Handler<AsyncResult<HttpEntity>> resultHandler) {
+		if (input.isPresent() && input.get().getHeader().isPresent()) {
+			Message header = input.get().getHeader().get();
+			authAdapterService.isAuthenticated(header.getSecurityToken().getTokenValue(), authreply -> {
+				if (authreply.succeeded()) {
+					if (header instanceof DescriptionRequestMessage) {
+						multiPartAbout(header, resultHandler);
+					} else if (header instanceof ArtifactRequestMessage) {
+						data(header, "", resultHandler);
+					} else {
+						idsService.handleRejectionMessage(header.getId(), RejectionReason.MESSAGE_TYPE_NOT_SUPPORTED, resultHandler);
+					}
+				} else {
+					idsService.handleRejectionMessage(header.getId(), RejectionReason.NOT_AUTHENTICATED, resultHandler);
+				}
+			});
+		} else {
+			URI uri = null;
+			try {
+				uri = new URI("http://example.org");
+			} catch (URISyntaxException e) {
+				LOGGER.error("URI coulod not be created");
+				resultHandler.handle(Future.failedFuture(e));
+			}
+			idsService.handleRejectionMessage(uri, RejectionReason.MALFORMED_MESSAGE, resultHandler);
+		}
 	}
 
 	public void multiPartAbout(Message header, Handler<AsyncResult<HttpEntity>> resultHandler) {

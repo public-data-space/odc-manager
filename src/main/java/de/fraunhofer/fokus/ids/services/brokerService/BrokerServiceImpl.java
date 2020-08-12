@@ -12,6 +12,7 @@ import io.vertx.core.buffer.Buffer;
 import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
 import io.vertx.ext.web.client.WebClient;
+import org.apache.http.HttpHeaders;
 import org.apache.http.entity.ContentType;
 import org.apache.http.entity.mime.MultipartEntityBuilder;
 import org.apache.http.entity.mime.content.ContentBody;
@@ -188,12 +189,11 @@ public class BrokerServiceImpl implements BrokerService {
                     final int port = url.getPort() == -1 ? 80 : url.getPort();
                     final String host = url.getHost();
                     final String path = url.getPath();
-
                     webClient
                             .post(port, host, path)
                             .sendBuffer(buffer, ar -> {
                                 if (ar.succeeded()) {
-                                    Optional<IDSMessage> answer = IDSMessageParser.parse(ar.result().bodyAsString());
+                                    Optional<IDSMessage> answer = IDSMessageParser.parse(ar.result().headers().get(HttpHeaders.CONTENT_TYPE), ar.result().bodyAsString());
                                     if (answer.isPresent() && answer.get().getHeader().isPresent()) {
                                         if (answer.get().getHeader().get() instanceof RejectionMessage) {
                                             resultHandler.handle(Future.failedFuture(((RejectionMessage) answer.get().getHeader().get()).getRejectionReason().toString()));

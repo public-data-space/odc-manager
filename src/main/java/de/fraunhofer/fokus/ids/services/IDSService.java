@@ -435,9 +435,8 @@ public class IDSService {
 		CompositeFuture.all(header, payload).onComplete( reply -> {
 			if (reply.succeeded()) {
 				MultipartEntityBuilder multipartEntityBuilder = MultipartEntityBuilder.create()
-						.setBoundary("msgpart")
 						.setCharset(StandardCharsets.UTF_8)
-						.setContentType(ContentType.APPLICATION_JSON)
+						.setContentType(ContentType.MULTIPART_FORM_DATA)
 						.addPart("header", new StringBody(Json.encodePrettily(header.result()), org.apache.http.entity.ContentType.create("application/json")))
 						.addPart("payload", new StringBody(Json.encodePrettily(payload.result()), org.apache.http.entity.ContentType.create("application/json")));
 				resultHandler.handle(Future.succeededFuture(multipartEntityBuilder.build()));
@@ -489,9 +488,8 @@ public class IDSService {
 		}
 
 		MultipartEntityBuilder multipartEntityBuilder = MultipartEntityBuilder.create()
-				.setBoundary("msgpart")
 				.setCharset(StandardCharsets.UTF_8)
-				.setContentType(ContentType.APPLICATION_JSON)
+				.setContentType(ContentType.MULTIPART_FORM_DATA)
 				.addPart("header", cb);
 
 			return multipartEntityBuilder.build();
