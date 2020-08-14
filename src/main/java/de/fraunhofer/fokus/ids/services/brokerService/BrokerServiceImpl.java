@@ -12,6 +12,8 @@ import io.vertx.core.buffer.Buffer;
 import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
 import io.vertx.ext.web.client.WebClient;
+import org.apache.http.Header;
+import org.apache.http.HttpEntity;
 import org.apache.http.HttpHeaders;
 import org.apache.http.entity.ContentType;
 import org.apache.http.entity.mime.MultipartEntityBuilder;
@@ -19,6 +21,7 @@ import org.apache.http.entity.mime.content.ContentBody;
 import org.apache.http.entity.mime.content.StringBody;
 
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
@@ -180,34 +183,40 @@ public class BrokerServiceImpl implements BrokerService {
         });
     }
 
-    private void sendMessage(Buffer buffer, List<URL> urls, Handler<AsyncResult<Void>> resultHandler){
+    private void sendMessage(HttpEntity buffer, List<URL> urls, Handler<AsyncResult<Void>> resultHandler){
         if(buffer != null) {
             if(urls.isEmpty()){
                 resultHandler.handle(Future.succeededFuture());
             } else {
-                for (URL url : urls) {
-                    final int port = url.getPort() == -1 ? 80 : url.getPort();
-                    final String host = url.getHost();
-                    final String path = url.getPath();
-                    webClient
-                            .post(port, host, path)
-                            .sendBuffer(buffer, ar -> {
-                                if (ar.succeeded()) {
-                                    Optional<IDSMessage> answer = IDSMessageParser.parse(ar.result().headers().get(HttpHeaders.CONTENT_TYPE), ar.result().bodyAsString());
-                                    if (answer.isPresent() && answer.get().getHeader().isPresent()) {
-                                        if (answer.get().getHeader().get() instanceof RejectionMessage) {
-                                            resultHandler.handle(Future.failedFuture(((RejectionMessage) answer.get().getHeader().get()).getRejectionReason().toString()));
+                try(ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
+                    Header contentTypeHeader = buffer.getContentType();
+                    buffer.writeTo(baos);
+                    Buffer brokerMessage = Buffer.buffer().appendString(baos.toString());
+                    for (URL url : urls) {
+                        webClient
+                                .postAbs(url.toString())
+                                .putHeader(contentTypeHeader.getName(), contentTypeHeader.getValue())
+                                .sendBuffer(brokerMessage, ar -> {
+                                    if (ar.succeeded()) {
+                                        Optional<IDSMessage> answer = IDSMessageParser.parse(ar.result().headers().get(HttpHeaders.CONTENT_TYPE), ar.result().bodyAsString());
+                                        if (answer.isPresent() && answer.get().getHeader().isPresent()) {
+                                            if (answer.get().getHeader().get() instanceof RejectionMessage) {
+                                                resultHandler.handle(Future.failedFuture(((RejectionMessage) answer.get().getHeader().get()).getRejectionReason().toString()));
+                                            } else {
+                                                resultHandler.handle(Future.succeededFuture());
+                                            }
                                         } else {
                                             resultHandler.handle(Future.succeededFuture());
                                         }
                                     } else {
-                                        resultHandler.handle(Future.succeededFuture());
+                                        LOGGER.error(ar.cause());
+                                        resultHandler.handle(Future.failedFuture(ar.cause()));
                                     }
-                                } else {
-                                    LOGGER.error(ar.cause());
-                                    resultHandler.handle(Future.failedFuture(ar.cause()));
-                                }
-                            });
+                                });
+                    }
+                } catch (IOException e) {
+                    LOGGER.error(e);
+                    resultHandler.handle(Future.failedFuture(e));
                 }
             }
         }
@@ -237,22 +246,19 @@ public class BrokerServiceImpl implements BrokerService {
         });
     }
 
-    private Buffer createBrokerMessage(ConnectorNotificationMessage message, Connector connector){
+    private HttpEntity createBrokerMessage(ConnectorNotificationMessage message, Connector connector){
 
         try{
             ContentBody result = new StringBody(serializer.serialize(connector), org.apache.http.entity.ContentType.create("application/json"));
             ContentBody cb = new StringBody(serializer.serialize(message), org.apache.http.entity.ContentType.create("application/json"));
 
             MultipartEntityBuilder multipartEntityBuilder = MultipartEntityBuilder.create()
-                    .setBoundary("msgpart")
                     .setCharset(StandardCharsets.UTF_8)
-                    .setContentType(ContentType.APPLICATION_JSON)
+                    .setContentType(ContentType.MULTIPART_FORM_DATA)
                     .addPart("header", cb)
                     .addPart("payload", result);
 
-            ByteArrayOutputStream out = new ByteArrayOutputStream();
-            multipartEntityBuilder.build().writeTo(out);
-            return Buffer.buffer().appendString(out.toString());
+            return multipartEntityBuilder.build();
         } catch (Exception e){
             LOGGER.error(e);
         }
