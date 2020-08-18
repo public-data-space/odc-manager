@@ -249,8 +249,8 @@ public class BrokerServiceImpl implements BrokerService {
     private HttpEntity createBrokerMessage(ConnectorNotificationMessage message, Connector connector){
 
         try{
-            ContentBody result = new StringBody(serializer.serialize(connector), org.apache.http.entity.ContentType.create("application/json"));
-            ContentBody cb = new StringBody(serializer.serialize(message), org.apache.http.entity.ContentType.create("application/json"));
+            ContentBody result = new StringBody(serializer.serialize(connector), ContentType.create("application/json", StandardCharsets.UTF_8));
+            ContentBody cb = new StringBody(serializer.serialize(message), ContentType.create("application/json", StandardCharsets.UTF_8));
 
             MultipartEntityBuilder multipartEntityBuilder = MultipartEntityBuilder.create()
                     .setCharset(StandardCharsets.UTF_8)

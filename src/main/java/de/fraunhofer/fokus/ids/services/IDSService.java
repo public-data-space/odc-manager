@@ -421,7 +421,7 @@ public class IDSService {
 						MultipartEntityBuilder multipartEntityBuilder = MultipartEntityBuilder.create()
 								.setCharset(StandardCharsets.UTF_8)
 								.setContentType(ContentType.MULTIPART_FORM_DATA)
-								.addPart("header", new StringBody(finalMessage, org.apache.http.entity.ContentType.create("application/json")))
+								.addPart("header", new StringBody(finalMessage, ContentType.create("application/json", StandardCharsets.UTF_8)))
 								.addBinaryBody("payload", (File) payload.result(), ContentType.create("application/octet-stream"), fileNameReply.result());
 						resultHandler.handle(Future.succeededFuture(multipartEntityBuilder.build()));
 						((File) payload.result()).delete();
@@ -429,7 +429,7 @@ public class IDSService {
 						MultipartEntityBuilder multipartEntityBuilder = MultipartEntityBuilder.create()
 								.setCharset(StandardCharsets.UTF_8)
 								.setContentType(ContentType.MULTIPART_FORM_DATA)
-								.addPart("header", new StringBody(finalMessage, org.apache.http.entity.ContentType.create("application/json")))
+								.addPart("header", new StringBody(finalMessage, ContentType.create("application/json", StandardCharsets.UTF_8)))
 								.addBinaryBody("payload", (File) payload.result(), ContentType.create("application/octet-stream"), UUID.randomUUID().toString());
 						resultHandler.handle(Future.succeededFuture(multipartEntityBuilder.build()));
 						((File) payload.result()).delete();
@@ -452,18 +452,17 @@ public class IDSService {
                 try {
                     message = serializer.serialize(header.result());
                     connector = serializer.serialize(payload.result());
-                } catch (IOException e) {
-                   LOGGER.error(e);
-                    handleRejectionMessage(uri, RejectionReason.INTERNAL_RECIPIENT_ERROR, resultHandler);
-                }
 
-				MultipartEntityBuilder multipartEntityBuilder = MultipartEntityBuilder.create()
-						.setCharset(StandardCharsets.UTF_8)
-						.setContentType(ContentType.MULTIPART_FORM_DATA)
-						.addPart("header", new StringBody(message, org.apache.http.entity.ContentType.create("application/json")))
-						.addPart("payload", new StringBody(connector, org.apache.http.entity.ContentType.create("application/json")));
-				resultHandler.handle(Future.succeededFuture(multipartEntityBuilder.build()));
-
+					MultipartEntityBuilder multipartEntityBuilder = MultipartEntityBuilder.create()
+							.setCharset(StandardCharsets.UTF_8)
+							.setContentType(ContentType.MULTIPART_FORM_DATA)
+							.addPart("header", new StringBody(message, ContentType.create("application/json", StandardCharsets.UTF_8)))
+							.addPart("payload", new StringBody(connector, ContentType.create("application/json", StandardCharsets.UTF_8)));
+					resultHandler.handle(Future.succeededFuture(multipartEntityBuilder.build()));
+				} catch (IOException e) {
+					LOGGER.error(e);
+					handleRejectionMessage(uri, RejectionReason.INTERNAL_RECIPIENT_ERROR, resultHandler);
+				}
 			} else {
 				handleRejectionMessage(uri, RejectionReason.INTERNAL_RECIPIENT_ERROR, resultHandler);
 				LOGGER.error(reply.cause());
@@ -505,7 +504,7 @@ public class IDSService {
 	private HttpEntity createMultipartMessage(Message message) {
 		ContentBody cb = null;
 		try {
-			cb = new StringBody(serializer.serialize(message), ContentType.create("application/json"));
+			cb = new StringBody(serializer.serialize(message), ContentType.create("application/json", StandardCharsets.UTF_8));
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
