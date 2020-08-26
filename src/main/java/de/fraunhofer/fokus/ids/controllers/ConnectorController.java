@@ -151,7 +151,7 @@ public class ConnectorController {
 				responsePromise.fail(reply.cause());
 			}
 		});
-		idsService.handleAbouMessage(header.getId(), responseFuture, connectorFuture, resultHandler);
+		idsService.handleAboutMessage(header.getId(), responseFuture, connectorFuture, resultHandler);
 	}
 
 	public void about(Handler<AsyncResult<String>> resultHandler) {

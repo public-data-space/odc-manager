@@ -33,8 +33,9 @@ import java.util.List;
 public class IDSService {
 	private final Logger LOGGER = LoggerFactory.getLogger(IDSService.class.getName());
 
-	private String INFO_MODEL_VERSION = "3.1.0";
-	private String[] SUPPORTED_INFO_MODEL_VERSIONS = {"3.1.0"};
+	private String INFO_MODEL_VERSION = "4.0.0";
+	private String[] SUPPORTED_INFO_MODEL_VERSIONS = {"4.0.0"};
+	private static final String CONNECTOR_VERSION = "1.2.0";
 	private DataAssetManager dataAssetManager;
 	private ConfigService configService;
     private Serializer serializer = new Serializer();
@@ -81,21 +82,7 @@ public class IDSService {
 	}
 
 	public void createRegistrationMessage(JsonObject config, Handler<AsyncResult<Message>> resultHandler){
-				try {
-					ConnectorAvailableMessage message = new ConnectorAvailableMessageBuilder()
-							._issued_(getDate())
-							._modelVersion_(INFO_MODEL_VERSION)
-							._issuerConnector_(new URI(config.getString("url")+"#Connector"))
-							._securityToken_( new DynamicAttributeTokenBuilder()
-									._tokenFormat_(TokenFormat.JWT)
-									._tokenValue_(config.getString("jwt"))
-									.build())
-							.build();
-					resultHandler.handle(Future.succeededFuture(message));
-				} catch (URISyntaxException e) {
-					LOGGER.error(e);
-					resultHandler.handle(Future.failedFuture(e));
-				}
+		createUpdateMessage(config, resultHandler);
 	}
 
 	public void createUpdateMessage(JsonObject config, Handler<AsyncResult<Message>> resultHandler){
@@ -166,64 +153,68 @@ public class IDSService {
 
 	private void buildBaseConnector(JsonObject config, Handler<AsyncResult<Connector>> next){
 
-		Future<Catalog> catalogFuture = buildCatalog(config);
-		try {
-			BaseConnectorBuilder connectorBuilder = new BaseConnectorBuilder((new URI(config.getString("url") + "#Connector")))
-					._maintainer_(new URI(config.getString("maintainer")))
-					._version_("0.0.1")
-					._curator_(new URI(config.getString("curator")))
-					._physicalLocation_(new GeoFeatureBuilder(new URI(config.getString("country"))).build())
-					._outboundModelVersion_(INFO_MODEL_VERSION)
-					._inboundModelVersion_(new ArrayList<>(Arrays.asList(SUPPORTED_INFO_MODEL_VERSIONS)))
+		findPublished(publishedDataAssets -> {
+			if(publishedDataAssets.succeeded()){
+				HashMap endpointMap = getResourceEndpoints(config, publishedDataAssets.result());
+				ArrayList endpoints = new ArrayList(endpointMap.values());
+				endpoints.addAll(createStaticEndpoints(config));
+				Future<ResourceCatalog> catalogFuture = buildCatalog(config, publishedDataAssets.result(), endpointMap);
+				try {
+					BaseConnectorBuilder connectorBuilder = new BaseConnectorBuilder((new URI(config.getString("url") + "#Connector")))
+							._maintainer_(new URI(config.getString("maintainer")))
+							._version_(CONNECTOR_VERSION)
+							._curator_(new URI(config.getString("curator")))
+							._physicalLocation_(new GeoFeatureBuilder(new URI(config.getString("country"))).build())
+							._outboundModelVersion_(INFO_MODEL_VERSION)
+							._inboundModelVersion_(new ArrayList<>(Arrays.asList(SUPPORTED_INFO_MODEL_VERSIONS)))
 
-					//TODO Change dummy auth service (can be null)
-					//				._authInfo_(new AuthInfoBuilder(new URL(this.connectorURL + "#AuthInfo"))
-					//						._authService_(new URI(this.connectorURL + "#AuthService"))
-					//						._authStandard_(AuthStandard.OAUTH2_JWT)
-					//						.build())
+							//TODO Change dummy auth service (can be null)
+							//				._authInfo_(new AuthInfoBuilder(new URL(this.connectorURL + "#AuthInfo"))
+							//						._authService_(new URI(this.connectorURL + "#AuthService"))
+							//						._authStandard_(AuthStandard.OAUTH2_JWT)
+							//						.build())
 
-					._securityProfile_(SecurityProfile.BASE_CONNECTOR_SECURITY_PROFILE)
-					._title_(new ArrayList<>(Arrays.asList(new TypedLiteral(config.getString("title")))))
-					._host_(new ArrayList<>(Arrays.asList(new HostBuilder()
-							._accessUrl_(new URI(config.getString("url")))
-							._protocol_(Protocol.HTTP)
-							.build())));
+							._securityProfile_(SecurityProfile.BASE_SECURITY_PROFILE)
+							._title_(new ArrayList<>(Arrays.asList(new TypedLiteral(config.getString("title")))))
+							._hasEndpoint_(endpoints);
 
 					//TODO fill with information
 					//				._descriptions_(new ArrayList<PlainLiteral>(Arrays.asList(new PlainLiteral(""))))
 					//				._lifecycleActivities_(null)
 					//				._componentCertification_(null)
-					//				._physicalLocation_(null);
 
-			catalogFuture.onComplete( ac -> {
-				if(ac.succeeded()) {
-					connectorBuilder._catalog_(catalogFuture.result());
-					next.handle(Future.succeededFuture(connectorBuilder.build()));
-				}
-				else{
-					LOGGER.error(ac.cause());
-					next.handle(Future.failedFuture(ac.cause()));
-				}
-			});
+					catalogFuture.onComplete( ac -> {
+						if(ac.succeeded()) {
+							connectorBuilder._resourceCatalog_(new ArrayList(Arrays.asList(catalogFuture.result())));
+							next.handle(Future.succeededFuture(connectorBuilder.build()));
+						}
+						else{
+							LOGGER.error(ac.cause());
+							next.handle(Future.failedFuture(ac.cause()));
+						}
+					});
 
-		} catch (Exception e) {
-			LOGGER.error(e);
-			next.handle(Future.failedFuture(e.getMessage()));
-		}
+				} catch (Exception e) {
+					LOGGER.error(e);
+					next.handle(Future.failedFuture(e.getMessage()));
+				}
+
+			}
+		});
 	}
 
-	private Future<Catalog> buildCatalog(JsonObject config) {
+	private Future<ResourceCatalog> buildCatalog(JsonObject config, List<DataAsset> publishedDataAssets, Map<Long, ConnectorEndpoint> endpointMap) {
 
-		Future<List<Resource>> offers = getOfferResources(config);
+		Future<List<Resource>> offers = getOfferResources(config, publishedDataAssets, endpointMap);
 		Future<List<Resource>> requests = getRequestResources(config);
-		Promise<Catalog> catalog = Promise.promise();
+		Promise<ResourceCatalog> catalog = Promise.promise();
 
 		CompositeFuture.all(offers, requests).onComplete(cf -> {
 			if(cf.succeeded()) {
 				try {
-					catalog.complete(new CatalogBuilder(new URI(config.getString("url") + "#Catalog"))
-							._offer_(new ArrayList(offers.result()))
-							._request_(new ArrayList(requests.result()))
+					catalog.complete(new ResourceCatalogBuilder(new URI(config.getString("url") + "#Catalog"))
+							._offeredResource_(new ArrayList(offers.result()))
+							._requestedResource_(new ArrayList(requests.result()))
 							.build());
 				} catch (Exception e) {
 					LOGGER.error(e);
@@ -243,17 +234,15 @@ public class IDSService {
 		return Future.succeededFuture(new ArrayList<>());
 	}
 
-	private Future<List<Resource>> getOfferResources(JsonObject config) {
+	private Future<List<Resource>> getOfferResources(JsonObject config, List<DataAsset> publishedDataAssets, Map<Long, ConnectorEndpoint> endpointMap) {
 		Promise<List<Resource>> daPromise = Promise.promise();
-		findPublished(daList -> createDataResources(config, daList, daPromise));
+		createDataResources(config, publishedDataAssets, daPromise, endpointMap);
 		return daPromise.future();
 	}
 
-	private void createDataResources( JsonObject config, AsyncResult<List<DataAsset>> daList, Promise<List<Resource>> daPromise) {
-		if(daList.succeeded()) {
-			List<DataAsset> das = daList.result();
+	private void createDataResources( JsonObject config, List<DataAsset> daList, Promise<List<Resource>> daPromise, Map<Long, ConnectorEndpoint> endpointMap) {
 			ArrayList<Resource> offerResources = new ArrayList<>();
-			for (DataAsset da : das) {
+			for (DataAsset da : daList) {
 				try {
 					DataResourceBuilder r = new DataResourceBuilder(new URI(config.getString("url") + "/DataResource/"+da.getId()))
 							//						//TODO: The regular period with which items are added to a collection.
@@ -294,14 +283,13 @@ public class IDSService {
 							//						._variant_(null)
 							//._publisher_(null)
 							//._sovereign_(null);
-
 							._version_(da.getVersion())
-							._resourceEndpoint_(getResourceEndpoint(config, da));
+							._resourceEndpoint_(new ArrayList(Arrays.asList(endpointMap.get(da.getId()))));
 
 					if (da.getDatasetTitle() != null) {
 						r._title_(new ArrayList<>(Arrays.asList(new TypedLiteral(da.getDatasetTitle()))));
 					}
-					if (da.getDataSetDescription() != null) {
+					if (da.getDataSetDescription() != null && !da.getDataSetDescription().isEmpty()) {
 						r._description_(new ArrayList<>(Arrays.asList(new TypedLiteral(da.getDataSetDescription()))));
 					}
 					ArrayList<TypedLiteral> keywords = getKeyWords(da);
@@ -318,7 +306,6 @@ public class IDSService {
 				}
 			}
 			daPromise.complete(offerResources);
-		}
 	}
 
 	private void findPublished(Handler<AsyncResult<List<DataAsset>>> next) {
@@ -340,28 +327,55 @@ public class IDSService {
 		});
 	}
 
-	private ArrayList<? extends Endpoint> getResourceEndpoint(JsonObject config, DataAsset da) {
-		ArrayList<Endpoint> endpoints = new ArrayList<>();
-		Endpoint e;
-		try {
-			e = new StaticEndpointBuilder(new URI(config.getString("url")+"/ResourceEndpoint/"+UUID.randomUUID()))
-					._endpointArtifact_(new ArtifactBuilder(new URI(config.getString("url")+"/Artifact/"+da.getId()))
-							._creationDate_(getDate(da.getCreatedAt()))
-							._fileName_(da.getId().toString())
-							.build())
-					._endpointHost_(new HostBuilder(new URI(config.getString("url")+"#Host"))
-							._accessUrl_(new URI(config.getString("url")))
-							._pathPrefix_("/")
-							._protocol_(Protocol.HTTP)
-							.build())
-					._path_("/data/")
-					.build();
-			endpoints.add(e);
-		} catch (Exception e1) {
-			LOGGER.error(e1);
+	private HashMap<Long, ConnectorEndpoint> getResourceEndpoints(JsonObject config, List<DataAsset> daList) {
+		HashMap<Long, ConnectorEndpoint> endpoints = new HashMap<>();
+		for(DataAsset da : daList) {
+			try {
+				ConnectorEndpoint e = new ConnectorEndpointBuilder(new URI(config.getString("url") + "/ConnectorEndpoint/" + UUID.randomUUID()))
+						._endpointArtifact_(new ArtifactBuilder(new URI(config.getString("url") + "/Artifact/" + da.getId()))
+								._creationDate_(getDate(da.getCreatedAt()))
+								._fileName_(da.getFilename())
+								.build())
+						._accessURL_(new URI(config.getString("url") + "/data/" + da.getId().toString()))
+						._endpointInformation_(new ArrayList<>(Arrays.asList(new TypedLiteral("The file "+da.getFilename()+" can be obtained from this endpoint via GET request."))))
+						.build();
+				endpoints.put(da.getId(),e);
+			} catch (Exception e1) {
+				LOGGER.error(e1);
+			}
 		}
 		return endpoints;
 	}
+
+	private ArrayList<? extends ConnectorEndpoint> createStaticEndpoints(JsonObject config) {
+		ArrayList<ConnectorEndpoint> endpoints = new ArrayList<>();
+			try {
+				ConnectorEndpoint e = new ConnectorEndpointBuilder(new URI(config.getString("url") + "/ConnectorEndpoint/" + UUID.randomUUID()))
+						._accessURL_(new URI(config.getString("url") + "/infrastructure"))
+						._endpointInformation_(new ArrayList<>(Arrays.asList(new TypedLiteral("All IDS Multipart messages should be sent to this endpoint."))))
+						.build();
+				endpoints.add(e);
+				ConnectorEndpoint e2 = new ConnectorEndpointBuilder(new URI(config.getString("url") + "/ConnectorEndpoint/" + UUID.randomUUID()))
+						._accessURL_(new URI(config.getString("url") + "/data"))
+						._endpointInformation_(new ArrayList<>(Arrays.asList(new TypedLiteral("IDS ArtifactRequestMessages can be sent to this endpoint via POST request."))))
+						.build();
+				endpoints.add(e2);
+				ConnectorEndpoint e3 = new ConnectorEndpointBuilder(new URI(config.getString("url") + "/ConnectorEndpoint/" + UUID.randomUUID()))
+						._accessURL_(new URI(config.getString("url") + "/about"))
+						._endpointInformation_(new ArrayList<>(Arrays.asList(new TypedLiteral("IDS DescriptionRequestMessages can be sent to this endpoint via POST request."))))
+						.build();
+				endpoints.add(e3);
+				ConnectorEndpoint e4 = new ConnectorEndpointBuilder(new URI(config.getString("url") + "/ConnectorEndpoint/" + UUID.randomUUID()))
+						._accessURL_(new URI(config.getString("url") + "/about"))
+						._endpointInformation_(new ArrayList<>(Arrays.asList(new TypedLiteral("The Connector SelfDescription can be obtained from this endpoint via GET request."))))
+						.build();
+				endpoints.add(e4);
+			} catch (Exception e1) {
+				LOGGER.error(e1);
+			}
+		return endpoints;
+	}
+
 
 	private XMLGregorianCalendar getDate(java.time.Instant createdAt) {
 
@@ -379,7 +393,9 @@ public class IDSService {
 	private ArrayList<TypedLiteral> getKeyWords(DataAsset da) {
 		ArrayList<TypedLiteral> keywords = new ArrayList<>();
 		for (String tag : da.getTags()) {
-			keywords.add(new TypedLiteral(tag));
+			if(!tag.isEmpty()) {
+				keywords.add(new TypedLiteral(tag));
+			}
 		}
 		return keywords.isEmpty()? null : keywords;
 	}
@@ -442,16 +458,13 @@ public class IDSService {
 			});
 	}
 
-	public void handleAbouMessage(URI uri, Future<Message> header, Future<Connector> payload, Handler<AsyncResult<HttpEntity>> resultHandler) {
+	public void handleAboutMessage(URI uri, Future<Message> header, Future<Connector> payload, Handler<AsyncResult<HttpEntity>> resultHandler) {
 		CompositeFuture.all(header, payload).onComplete( reply -> {
 			if (reply.succeeded()) {
 
-                String message = null;
-                String connector = null;
-
                 try {
-                    message = serializer.serialize(header.result());
-                    connector = serializer.serialize(payload.result());
+					String message = serializer.serialize(header.result());
+					String connector = serializer.serialize(payload.result());
 
 					MultipartEntityBuilder multipartEntityBuilder = MultipartEntityBuilder.create()
 							.setCharset(StandardCharsets.UTF_8)
