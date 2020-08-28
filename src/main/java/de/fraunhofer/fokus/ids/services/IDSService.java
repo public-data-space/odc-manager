@@ -158,9 +158,6 @@ public class IDSService {
 		findPublished(publishedDataAssets -> {
 			if(publishedDataAssets.succeeded()){
 				HashMap<Long, List<ConnectorEndpoint>> endpointMap = getResourceEndpoints(config, publishedDataAssets.result());
-				ArrayList<ConnectorEndpoint> endpoints = new ArrayList();
-				endpointMap.values().stream().forEach(l -> endpoints.addAll(l));
-				endpoints.addAll(createStaticEndpoints(config));
 				Future<ResourceCatalog> catalogFuture = buildCatalog(config, publishedDataAssets.result(), endpointMap);
 				try {
 					BaseConnectorBuilder connectorBuilder = new BaseConnectorBuilder((new URI(config.getString("url") + "#Connector")))
@@ -179,7 +176,7 @@ public class IDSService {
 
 							._securityProfile_(SecurityProfile.BASE_SECURITY_PROFILE)
 							._title_(new ArrayList<>(Arrays.asList(new TypedLiteral(config.getString("title")))))
-							._hasEndpoint_(endpoints);
+							._hasEndpoint_(createStaticEndpoints(config));
 
 					//TODO fill with information
 					//				._descriptions_(new ArrayList<PlainLiteral>(Arrays.asList(new PlainLiteral(""))))
