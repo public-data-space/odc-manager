@@ -3,8 +3,9 @@ package de.fraunhofer.fokus.ids.controllers;
 import de.fraunhofer.fokus.ids.messages.DataAssetCreateMessage;
 import de.fraunhofer.fokus.ids.models.Constants;
 import de.fraunhofer.fokus.ids.models.DataAssetDescription;
-import de.fraunhofer.fokus.ids.persistence.entities.DataAsset;
 import de.fraunhofer.fokus.ids.persistence.entities.DataSource;
+import de.fraunhofer.fokus.ids.persistence.entities.Dataset;
+import de.fraunhofer.fokus.ids.persistence.entities.Distribution;
 import de.fraunhofer.fokus.ids.persistence.entities.serialization.DataSourceSerializer;
 import de.fraunhofer.fokus.ids.persistence.enums.DataAssetStatus;
 import de.fraunhofer.fokus.ids.persistence.enums.JobStatus;
@@ -21,7 +22,7 @@ import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
 
 import java.text.ParseException;
-import java.util.ArrayList;
+import java.util.*;
 
 /**
  * @author Vincent Bohlen, vincent.bohlen@fokus.fraunhofer.de
@@ -106,79 +107,82 @@ public class DataAssetController {
         }
     }
 
-    private void initiateDataAssetCreation(Handler<AsyncResult<DataAsset>> next, DataAssetDescription dataAssetDescription) {
-        dataAssetManager.addInitial(initCreateReply -> {
-            if (initCreateReply.succeeded()) {
-                if (dataAssetDescription.getDatasourcetype().equals("File Upload")){
-                    dataSourceManager.findByType("File Upload",dataSourceReply -> {
-                        DataAsset dataAsset = new DataAsset();
-                        if (dataSourceReply.succeeded()){
-                            DataSource dataSource = null;
-                            try {
-                                dataSource = DataSourceSerializer.deserialize(dataSourceReply.result().getJsonObject(0));
-                            } catch (ParseException e) {
-                                LOGGER.error(e);
-                                next.handle(Future.failedFuture(e));
-                            }
+    private void initiateDataAssetCreation(Handler<AsyncResult<Dataset>> next, DataAssetDescription dataAssetDescription) {
+        if (dataAssetDescription.getDatasourcetype().equals("File Upload")){
+            dataSourceManager.findByType("File Upload",dataSourceReply -> {
+                Dataset dataset = new Dataset();
+                if (dataSourceReply.succeeded()){
+                    DataSource dataSource = null;
+                    try {
+                        dataSource = DataSourceSerializer.deserialize(dataSourceReply.result().getJsonObject(0));
+                    } catch (ParseException e) {
+                        LOGGER.error(e);
+                        next.handle(Future.failedFuture(e));
+                    }
+                    dataset.setSourceId(dataSource.getId());
+                    dataset.setDescription((String)dataAssetDescription.getData().get("datasetnotes"));
+                    dataset.setTitle((String)dataAssetDescription.getData().get("datasettitle"));
+                    dataset.setResourceId(UUID.randomUUID().toString());
 
-                            dataAsset.setId(initCreateReply.result());
-                            dataAsset.setSourceID(dataSource.getId());
-                            dataAsset.setDatasetNotes((String)dataAssetDescription.getData().get("datasetnotes"));
-                            dataAsset.setDatasetTitle((String)dataAssetDescription.getData().get("datasettitle"));
-                            dataAsset.setStatus(DataAssetStatus.APPROVED);
-                            next.handle(Future.succeededFuture(dataAsset));
-                        }
-                        else {
-                            LOGGER.error(dataSourceReply.cause());
-                            next.handle(Future.failedFuture(dataSourceReply.cause()));
-                        }
-                    });
+                    Distribution distribution = new Distribution();
+                    distribution.setResourceId(UUID.randomUUID().toString());
+                    distribution.setFilename((String)dataAssetDescription.getData().get("file"));
+                    distribution.setFiletype((String)dataAssetDescription.getData().get("datasetformat"));
+                    Set set = new HashSet<>();
+                    set.add(distribution);
+                    dataset.setDistributions(set);
+                    dataset.setStatus(DataAssetStatus.APPROVED);
+                    next.handle(Future.succeededFuture(dataset));
                 }
                 else {
-                    dataSourceManager.findById(Integer.toUnsignedLong(dataAssetDescription.getSourceId()), dataSourceReply -> {
-                        if (dataSourceReply.succeeded()) {
+                    LOGGER.error(dataSourceReply.cause());
+                    next.handle(Future.failedFuture(dataSourceReply.cause()));
+                }
+            });
+        }
+        else {
+            dataSourceManager.findById(Integer.toUnsignedLong(dataAssetDescription.getSourceId()), dataSourceReply -> {
+                if (dataSourceReply.succeeded()) {
+                    DataSource dataSource = null;
+                    try {
+                        dataSource = DataSourceSerializer.deserialize(dataSourceReply.result());
+                    } catch (ParseException e) {
+                        LOGGER.error(e);
+                        next.handle(Future.failedFuture(e));
+                    }
 
-                            DataSource dataSource = null;
-                            try {
-                                dataSource = DataSourceSerializer.deserialize(dataSourceReply.result());
-                            } catch (ParseException e) {
-                                LOGGER.error(e);
-                                next.handle(Future.failedFuture(e));
+                    DataAssetCreateMessage mes = new DataAssetCreateMessage();
+                    mes.setData(new JsonObject(dataAssetDescription.getData()));
+                    mes.setDataSource(dataSource);
+                    final long datasourceId = dataSource.getId();
+                    dataSourceAdapterService.createDataAsset(dataSource.getDatasourceType(), new JsonObject(Json.encode(mes)), dataAssetCreateReply -> {
+                        if (dataAssetCreateReply.succeeded()) {
+                            if (dataAssetCreateReply.result() == null) {
+                                LOGGER.error("No DataAsset created.");
+                                next.handle(Future.failedFuture("No DataAsset created."));
+                            } else {
+                                Dataset dataset = Json.decodeValue(dataAssetCreateReply.result().toString(), Dataset.class);
+                                dataset.setSourceId(datasourceId);
+                                next.handle(Future.succeededFuture(dataset));
                             }
-
-                            DataAssetCreateMessage mes = new DataAssetCreateMessage();
-                            mes.setData(new JsonObject(dataAssetDescription.getData()));
-                            mes.setDataSource(dataSource);
-                            mes.setDataAssetId(initCreateReply.result());
-                            dataSourceAdapterService.createDataAsset(dataSource.getDatasourceType(), new JsonObject(Json.encode(mes)), dataAssetCreateReply -> {
-                                if (dataAssetCreateReply.succeeded()) {
-                                    if (dataAssetCreateReply.result() == null) {
-                                        cleanUpDataAssetDummy(next, initCreateReply.result(), dataAssetCreateReply.cause());
-                                    } else {
-                                        next.handle(Future.succeededFuture(Json.decodeValue(dataAssetCreateReply.result().toString(), DataAsset.class)));
-                                    }
-                                } else {
-                                    cleanUpDataAssetDummy(next, initCreateReply.result(), dataAssetCreateReply.cause());
-                                }
-                            });
                         } else {
-                            LOGGER.error(dataSourceReply.cause());
-                            next.handle(Future.failedFuture(dataSourceReply.cause()));
+                            LOGGER.error(dataAssetCreateReply.cause());
+                            next.handle(Future.failedFuture(dataAssetCreateReply.cause()));
                         }
                     });
+                } else {
+                    LOGGER.error(dataSourceReply.cause());
+                    next.handle(Future.failedFuture(dataSourceReply.cause()));
                 }
-            } else {
-                LOGGER.error(initCreateReply.cause());
-                next.handle(Future.failedFuture(initCreateReply.cause()));
-            }
-        });
+            });
+        }
     }
 
     public void getFileName(Long id, Handler<AsyncResult<String>> result){
-        dataAssetManager.findById(id,jsonObjectAsyncResult -> {
+        dataAssetManager.findDistributionById(id,jsonObjectAsyncResult -> {
             if (jsonObjectAsyncResult.succeeded()){
-                DataAsset dataAsset = Json.decodeValue(jsonObjectAsyncResult.result().toString(), DataAsset.class);
-                result.handle(Future.succeededFuture(dataAsset.getFilename()));
+                Distribution distribution = Json.decodeValue(jsonObjectAsyncResult.result().toString(), Distribution.class);
+                result.handle(Future.succeededFuture(distribution.getFilename()));
             }
             else {
                 LOGGER.error(jsonObjectAsyncResult.cause());
@@ -187,24 +191,11 @@ public class DataAssetController {
         });
     }
 
-    private void cleanUpDataAssetDummy(Handler<AsyncResult<DataAsset>> next, long dataAssetId, Throwable cause){
-        dataAssetManager.delete(dataAssetId, deleteReply -> {
-            if(deleteReply.succeeded()){
-                LOGGER.error(cause);
-                next.handle(Future.failedFuture(cause));
-            } else{
-                LOGGER.info("INCONSISTENCY IN DATABASE. There is a DataAsset object in the database with no corresponding object in the adapter.");
-                next.handle(Future.failedFuture(deleteReply.cause()));
-            }
-        });
-    }
-
-	private void createDataAsset(long jobId, AsyncResult<DataAsset> res, String licenceurl, String licencetitle) {
+	private void createDataAsset(long jobId, AsyncResult<Dataset> res, String licenceurl, String licencetitle) {
 		if (res.succeeded()) {
-		    DataAsset dataAsset = res.result();
-		    if(dataAsset.getLicenseUrl() == null){
-		        dataAsset.setLicenseUrl(licenceurl);
-		        dataAsset.setLicenseTitle(licencetitle);
+		    Dataset dataAsset = res.result();
+		    if(dataAsset.getLicense() == null){
+		        dataAsset.setLicense(licenceurl);
             }
 			LOGGER.info("DataAsset was successfully created.");
 			dataAssetManager.add(new JsonObject(Json.encode(res.result())), reply -> {
@@ -228,7 +219,7 @@ public class DataAssetController {
             if (reply.succeeded()) {
                 ArrayList<Future> publishFutures = new ArrayList<>();
                 for (int i = 0; i < reply.result().size(); i++) {
-                    DataAsset da = Json.decodeValue(reply.result().getJsonObject(i).toString(), DataAsset.class);
+                    Dataset da = Json.decodeValue(reply.result().getJsonObject(i).toString(), Dataset.class);
                     Promise promise = Promise.promise();
                     dataAssetManager.changeStatus(DataAssetStatus.PUBLISHED, da.getId(), promise.future());
                 }
@@ -261,7 +252,7 @@ public class DataAssetController {
             if (reply.succeeded()) {
                 ArrayList<Future> publishFutures = new ArrayList<>();
                 for (int i = 0; i < reply.result().size(); i++) {
-                    DataAsset da = Json.decodeValue(reply.result().getJsonObject(i).toString(), DataAsset.class);
+                    Dataset da = Json.decodeValue(reply.result().getJsonObject(i).toString(), Dataset.class);
                     Promise promise = Promise.promise();
                     dataAssetManager.changeStatus(DataAssetStatus.APPROVED, da.getId(), promise.future());
                 }
@@ -334,12 +325,13 @@ public class DataAssetController {
 	}
 
 	public void delete(Long id, Handler<AsyncResult<JsonObject>> resultHandler) {
-		dataAssetManager.findById(id, dataAssetReply -> {
+		dataAssetManager.findDatasetById(id, dataAssetReply -> {
 			if(dataAssetReply.succeeded()){
-				dataSourceManager.findById(Json.decodeValue(dataAssetReply.result().toString(), DataAsset.class).getSourceID(), reply2 -> {
+			    Dataset ds = Json.decodeValue(dataAssetReply.result().toString(), Dataset.class);
+				dataSourceManager.findById(ds.getSourceId(), reply2 -> {
 				    if(reply2.succeeded()){
                         Promise<JsonObject> serviceDeletePromise = Promise.promise();
-						dataSourceAdapterService.delete(reply2.result().getString("datasourcetype"), id, serviceDeletePromise.future());
+						dataSourceAdapterService.delete(reply2.result().getString("datasourcetype"), ds.getResourceId(), serviceDeletePromise.future());
 
 						Promise<Void> databaseDeletePromise = Promise.promise();
 						dataAssetManager.delete(id, databaseDeletePromise.future());

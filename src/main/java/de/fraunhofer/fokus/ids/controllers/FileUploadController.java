@@ -2,7 +2,7 @@ package de.fraunhofer.fokus.ids.controllers;
 
 import de.fraunhofer.fokus.ids.models.Constants;
 import de.fraunhofer.fokus.ids.models.DataAssetDescription;
-import de.fraunhofer.fokus.ids.persistence.entities.DataAsset;
+import de.fraunhofer.fokus.ids.persistence.entities.Distribution;
 import de.fraunhofer.fokus.ids.persistence.managers.DataAssetManager;
 import de.fraunhofer.fokus.ids.persistence.managers.DataSourceManager;
 import de.fraunhofer.fokus.ids.persistence.managers.JobManager;
@@ -28,21 +28,12 @@ import java.util.zip.ZipOutputStream;
 /**
  * @author Hoang Luan Ta, hoang.luan.ta@fokus.fraunhofer.de
  */
+
 public class FileUploadController {
     private Logger LOGGER = LoggerFactory.getLogger(FileUploadController.class.getName());
-    private DataAssetManager dataAssetManager;
-    private DataSourceAdapterService dataSourceAdapterService;
-    private DataSourceManager dataSourceManager;
-    private JobManager jobManager;
-    private BrokerController brokerController;
     private DataAssetController dataAssetController;
 
     public FileUploadController(Vertx vertx) {
-        dataAssetManager = new DataAssetManager();
-        jobManager = new JobManager();
-        this.dataSourceManager = new DataSourceManager();
-        dataSourceAdapterService = DataSourceAdapterService.createProxy(vertx, Constants.DATASOURCEADAPTER_SERVICE);
-        brokerController = new BrokerController(vertx);
         dataAssetController = new DataAssetController(vertx);
     }
 
@@ -67,15 +58,42 @@ public class FileUploadController {
     public void uploadFile (RoutingContext routingContext,Handler<AsyncResult<JsonObject>> resultHandler){
         DataAssetDescription dataAssetDescription = new DataAssetDescription();
         List<String> list= new ArrayList<>();
-        for (FileUpload fileUpload : routingContext.fileUploads()){
-            File fileSource = new File(fileUpload.uploadedFileName());
-            File fileDes = new File(fileUpload.fileName());
-            try {
-                FileUtils.moveFile(fileSource,fileDes);
-            } catch (IOException e) {
-                e.printStackTrace();
+        String tempName;
+        String format;
+        if(routingContext.fileUploads().size() > 1) {
+            format = "ZIP";
+            for (FileUpload fileUpload : routingContext.fileUploads()) {
+                File fileSource = new File(fileUpload.uploadedFileName());
+                File fileDes = new File(fileUpload.fileName());
+                try {
+                    FileUtils.moveFile(fileSource, fileDes);
+                } catch (IOException e) {
+                    LOGGER.error(e);
+                }
+                list.add(fileUpload.fileName().trim());
             }
-            list.add(fileUpload.fileName().trim());
+            tempName = UUID.randomUUID().toString()+".zip";
+            FileOutputStream fos ;
+            ZipOutputStream zipOut ;
+            try {
+                fos = new FileOutputStream(tempName);
+                zipOut = new ZipOutputStream(new BufferedOutputStream(fos));
+                addToZipFile(list,zipOut);
+            } catch (IOException e) {
+                LOGGER.error(e);
+            }
+        } else {
+            FileUpload fileUpload = routingContext.fileUploads().iterator().next();
+            File fileSource = new File(fileUpload.uploadedFileName());
+            tempName = new Date().toInstant()+"_"+fileUpload.fileName();
+            File fileDes = new File(tempName);
+            format = FilenameUtils.getExtension(fileDes.toString()).toUpperCase();
+            try {
+                FileUtils.moveFile(fileSource, fileDes);
+            } catch (IOException e) {
+                LOGGER.error(e);
+            }
+
         }
         JsonObject data = new JsonObject(routingContext.request().getFormAttribute("data"));
         Map<String, String> map = new HashMap<String , String>()
@@ -83,7 +101,8 @@ public class FileUploadController {
             {
                 put("datasettitle", data.getString("datasettitle"));
                 put("datasetnotes", data.getString("datasetnotes"));
-                put("file", list.toString());
+                put("datasetformat", format);
+                put("file", tempName);
             }
         };
         dataAssetDescription.setData(map);
@@ -92,43 +111,23 @@ public class FileUploadController {
 
     }
 
-    public void getFileUpload( Handler<AsyncResult<File>> resultHandler, DataAsset dataAsset)  {
-        String getFiles = dataAsset.getUrl();
-        String replace = getFiles.replace("[","");
-        String replace1 = replace.replace("]","");
-        List<String> myList = Arrays.asList(replace1.split(","));
-        if (myList.size()>1){
-            String tempName = "ids.zip";
-            File file = new File(tempName);
-            FileOutputStream fos ;
-            ZipOutputStream zipOut ;
-            try {
-                fos = new FileOutputStream(tempName);
-                zipOut = new ZipOutputStream(new BufferedOutputStream(fos));
-                addToZipFile(myList,zipOut);
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-            resultHandler.handle(Future.succeededFuture(file));
-        }else {
-            String singleFile = myList.get(0);
-            File file = new File(singleFile);
-            File parent = new File(System.getProperty("java.io.tmpdir"));
-            String baseName = FilenameUtils.getBaseName(singleFile);
-            String extension = FilenameUtils.getExtension(singleFile);
-            File temp = new File(parent, baseName+"."+extension);
+    public void getFileUpload( Handler<AsyncResult<File>> resultHandler, Distribution distribution)  {
+        String filename = distribution.getFilename();
+        File file = new File(filename);
+        File parent = new File(System.getProperty("java.io.tmpdir"));
+        String baseName = FilenameUtils.getBaseName(filename);
+        String extension = FilenameUtils.getExtension(filename);
+        File temp = new File(parent, baseName+"."+extension);
 
-            if (temp.exists()) {
-                temp.delete();
-            }
-
-            try {
-                temp.createNewFile();
-                Files.copy(file.toPath(),temp.toPath(), StandardCopyOption.REPLACE_EXISTING);
-            } catch (IOException ex) {
-                ex.printStackTrace();
-            }
-            resultHandler.handle(Future.succeededFuture(temp));
+        if (temp.exists()) {
+            temp.delete();
         }
+        try {
+            temp.createNewFile();
+            Files.copy(file.toPath(),temp.toPath(), StandardCopyOption.REPLACE_EXISTING);
+        } catch (IOException ex) {
+            LOGGER.error(ex);
+        }
+        resultHandler.handle(Future.succeededFuture(temp));
     }
 }

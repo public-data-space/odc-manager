@@ -126,14 +126,14 @@ public class DataSourceAdapterServiceImpl implements DataSourceAdapterService {
     }
 
     @Override
-    public DataSourceAdapterService delete(String dataSourceType, Long id, Handler<AsyncResult<JsonObject>> resultHandler) {
+    public DataSourceAdapterService delete(String dataSourceType, String resourceId, Handler<AsyncResult<JsonObject>> resultHandler) {
         if (dataSourceType.equals("File Upload")){
             resultHandler.handle(Future.succeededFuture(null));
         }
         else{
             get(configManagerPort, configManagerHost,"/getAdapter/"+dataSourceType, reply -> {
                 if(reply.succeeded()) {
-                    get(reply.result().getInteger("port"), reply.result().getString("host"), "/delete/"+id, adapterReply -> {
+                    get(reply.result().getInteger("port"), reply.result().getString("host"), "/delete/"+resourceId, adapterReply -> {
                         if (adapterReply.succeeded()) {
                             resultHandler.handle(Future.succeededFuture(adapterReply.result()));
                         } else {

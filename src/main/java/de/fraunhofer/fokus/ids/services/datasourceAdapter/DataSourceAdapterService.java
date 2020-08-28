@@ -24,7 +24,7 @@ public interface DataSourceAdapterService {
     DataSourceAdapterService supported(String dataSourceType, Handler<AsyncResult<JsonObject>> resultHandler);
 
     @Fluent
-    DataSourceAdapterService delete(String dataSourceType, Long id, Handler<AsyncResult<JsonObject>> resultHandler);
+    DataSourceAdapterService delete(String dataSourceType, String resourceId, Handler<AsyncResult<JsonObject>> resultHandler);
 
     @Fluent
     DataSourceAdapterService createDataAsset(String dataSourceType, JsonObject message, Handler<AsyncResult<JsonObject>> resultHandler);

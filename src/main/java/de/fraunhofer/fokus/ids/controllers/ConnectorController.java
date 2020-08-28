@@ -4,8 +4,9 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import de.fraunhofer.fokus.ids.enums.FileType;
 import de.fraunhofer.fokus.ids.messages.ResourceRequest;
 import de.fraunhofer.fokus.ids.models.*;
-import de.fraunhofer.fokus.ids.persistence.entities.DataAsset;
 import de.fraunhofer.fokus.ids.persistence.entities.DataSource;
+import de.fraunhofer.fokus.ids.persistence.entities.Dataset;
+import de.fraunhofer.fokus.ids.persistence.entities.Distribution;
 import de.fraunhofer.fokus.ids.persistence.entities.serialization.DataSourceSerializer;
 import de.fraunhofer.fokus.ids.persistence.managers.DataAssetManager;
 import de.fraunhofer.fokus.ids.persistence.managers.DataSourceManager;
@@ -190,44 +191,52 @@ public class ConnectorController {
 			if (jsonObjectAsyncResult.succeeded()) {
 				try {
 					DataSource dataSourceFileUpload = DataSourceSerializer.deserialize(jsonObjectAsyncResult.result().getJsonObject(0));
-					dataAssetManager.findById(id, reply -> {
-						if (reply.succeeded()) {
-							DataAsset dataAsset = Json.decodeValue(reply.result().toString(), DataAsset.class);
-							if (dataAsset.getSourceID().equals(dataSourceFileUpload.getId())) {
-								fileUploadController.getFileUpload(resultHandler, dataAsset);
-							} else {
-								dataSourceManager.findById(dataAsset.getSourceID(), reply2 -> {
-									if (reply2.succeeded()) {
-										DataSource dataSource = null;
-										try {
-											dataSource = DataSourceSerializer.deserialize(reply2.result());
-										} catch (ParseException e) {
-											LOGGER.error(e);
-											resultHandler.handle(Future.failedFuture(e));
-										}
+					dataAssetManager.findDistributionById(id, distReply -> {
+						if (distReply.succeeded()) {
+							Distribution distribution = Json.decodeValue(distReply.result().toString(), Distribution.class);
+							dataAssetManager.findDatasetByResourceId(distribution.getDatasetId(), datReply -> {
+								if (datReply.succeeded()) {
+									Dataset dataset = Json.decodeValue(datReply.result().toString(), Dataset.class);
+									if (dataset.getSourceId().equals(dataSourceFileUpload.getId())) {
+										fileUploadController.getFileUpload(resultHandler, distribution);
+									} else {
+										dataSourceManager.findById(dataset.getSourceId(), reply2 -> {
+											if (reply2.succeeded()) {
+												DataSource dataSource = null;
+												try {
+													dataSource = DataSourceSerializer.deserialize(reply2.result());
+												} catch (ParseException e) {
+													LOGGER.error(e);
+													resultHandler.handle(Future.failedFuture(e));
+												}
 
-										ResourceRequest request = new ResourceRequest();
-										request.setDataSource(dataSource);
-										request.setDataAsset(dataAsset);
-										request.setFileType(fileType);
+												ResourceRequest request = new ResourceRequest();
+												request.setDataSource(dataSource);
+												request.setDataAsset(distribution);
+												request.setFileType(fileType);
 
-										dataSourceAdapterService.getFile(dataSource.getDatasourceType(), new JsonObject(Json.encode(request)), reply3 -> {
-											if (reply3.succeeded()) {
-												resultHandler.handle(Future.succeededFuture(new File(reply3.result())));
+												dataSourceAdapterService.getFile(dataSource.getDatasourceType(), new JsonObject(Json.encode(request)), reply3 -> {
+													if (reply3.succeeded()) {
+														resultHandler.handle(Future.succeededFuture(new File(reply3.result())));
+													} else {
+														LOGGER.error("FileContent could not be retrieved.", reply3.cause());
+														resultHandler.handle(Future.failedFuture(reply3.cause()));
+													}
+												});
 											} else {
-												LOGGER.error("FileContent could not be retrieved.", reply3.cause());
-												resultHandler.handle(Future.failedFuture(reply3.cause()));
+												LOGGER.error("DataAsset could not be retrieved.", reply2.cause());
+												resultHandler.handle(Future.failedFuture(reply2.cause()));
 											}
 										});
-									} else {
-										LOGGER.error("DataAsset could not be retrieved.", reply2.cause());
-										resultHandler.handle(Future.failedFuture(reply2.cause()));
 									}
-								});
-							}
+								} else {
+									LOGGER.error(datReply.cause());
+									resultHandler.handle(Future.failedFuture(datReply.cause()));
+								}
+							});
 						} else {
-							LOGGER.error(reply.cause());
-							resultHandler.handle(Future.failedFuture(reply.cause()));
+							LOGGER.error(distReply.cause());
+							resultHandler.handle(Future.failedFuture(distReply.cause()));
 						}
 					});
 				} catch (ParseException e) {

@@ -32,15 +32,15 @@ public class InitService{
 			.put("username","TEXT")
 			.put("password","TEXT");
 
-	private final JsonObject dataasset = new JsonObject().put("id","SERIAL").put("created_at","TIMESTAMP")
-			.put("updated_at","TIMESTAMP").put("datasetid","TEXT").put("name","TEXT")
-			.put("url","TEXT").put("format","TEXT").put("licenseurl","TEXT").put("licensetitle","TEXT").put("datasettitle","TEXT")
-			.put("datasetnotes","TEXT").put("orignalresourceurl","TEXT")
-			.put("orignaldataseturl","TEXT").put("signature","TEXT").put("status","INTEGER").put("resourceid","TEXT")
-			.put("tags","TEXT[]").put("datasetdescription","TEXT").put("organizationtitle","TEXT")
-			.put("organizationdescription","TEXT").put("version","TEXT").put("organizationdescription","TEXT")
-            .put("sourceid","TEXT")
-            .put("filename", "TEXT");
+	private final JsonObject dataset = new JsonObject().put("id","SERIAL").put("created_at","TIMESTAMP")
+			.put("updated_at","TIMESTAMP").put("resourceid","TEXT").put("license","TEXT")
+			.put("title","TEXT").put("description","TEXT").put("publisher","TEXT").put("status","INTEGER").put("tags","TEXT[]")
+			.put("version","TEXT").put("sourceid","BIGINT");
+
+	private final JsonObject distribution = new JsonObject().put("id","SERIAL").put("created_at","TIMESTAMP")
+			.put("updated_at","TIMESTAMP").put("resourceid","TEXT").put("license","TEXT")
+			.put("title","TEXT").put("description","TEXT").put("publisher","TEXT").put("filename","TEXT").put("filetype","TEXT")
+			.put("datasetid","TEXT");
 
 	private final JsonObject datasource = new JsonObject().put("id","SERIAL")
 			.put("created_at","TIMESTAMP")
@@ -111,8 +111,9 @@ public class InitService{
 
 		ArrayList<Future> list = new ArrayList<Future>() {{
             performUpdate(user,"public.user");
-            performUpdate(dataasset,"dataasset");
-            performUpdate(datasource,"datasource");
+            performUpdate(dataset,"dataset");
+			performUpdate(distribution,"distribution");
+			performUpdate(datasource,"datasource");
             performUpdate(broker,"broker");
             performUpdate(job,"job");
             performUpdate(configuration,"configuration");

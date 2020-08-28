@@ -1,6 +1,7 @@
 package de.fraunhofer.fokus.ids.services;
 
-import de.fraunhofer.fokus.ids.persistence.entities.DataAsset;
+import de.fraunhofer.fokus.ids.persistence.entities.Dataset;
+import de.fraunhofer.fokus.ids.persistence.entities.Distribution;
 import de.fraunhofer.fokus.ids.persistence.managers.DataAssetManager;
 import de.fraunhofer.iais.eis.*;
 import de.fraunhofer.iais.eis.ids.jsonld.Serializer;
@@ -16,6 +17,7 @@ import org.apache.http.entity.ContentType;
 import org.apache.http.entity.mime.MultipartEntityBuilder;
 import org.apache.http.entity.mime.content.ContentBody;
 import org.apache.http.entity.mime.content.StringBody;
+import org.eclipse.rdf4j.model.vocabulary.DCTERMS;
 
 import javax.xml.datatype.DatatypeConfigurationException;
 import javax.xml.datatype.DatatypeFactory;
@@ -35,7 +37,7 @@ public class IDSService {
 
 	private String INFO_MODEL_VERSION = "4.0.0";
 	private String[] SUPPORTED_INFO_MODEL_VERSIONS = {"4.0.0"};
-	private static final String CONNECTOR_VERSION = "1.2.0";
+	private static final String CONNECTOR_VERSION = "2.0.0";
 	private DataAssetManager dataAssetManager;
 	private ConfigService configService;
     private Serializer serializer = new Serializer();
@@ -155,8 +157,9 @@ public class IDSService {
 
 		findPublished(publishedDataAssets -> {
 			if(publishedDataAssets.succeeded()){
-				HashMap endpointMap = getResourceEndpoints(config, publishedDataAssets.result());
-				ArrayList endpoints = new ArrayList(endpointMap.values());
+				HashMap<Long, List<ConnectorEndpoint>> endpointMap = getResourceEndpoints(config, publishedDataAssets.result());
+				ArrayList<ConnectorEndpoint> endpoints = new ArrayList();
+				endpointMap.values().stream().forEach(l -> endpoints.addAll(l));
 				endpoints.addAll(createStaticEndpoints(config));
 				Future<ResourceCatalog> catalogFuture = buildCatalog(config, publishedDataAssets.result(), endpointMap);
 				try {
@@ -203,7 +206,7 @@ public class IDSService {
 		});
 	}
 
-	private Future<ResourceCatalog> buildCatalog(JsonObject config, List<DataAsset> publishedDataAssets, Map<Long, ConnectorEndpoint> endpointMap) {
+	private Future<ResourceCatalog> buildCatalog(JsonObject config, List<Dataset> publishedDataAssets, Map<Long, List<ConnectorEndpoint>> endpointMap) {
 
 		Future<List<Resource>> offers = getOfferResources(config, publishedDataAssets, endpointMap);
 		Future<List<Resource>> requests = getRequestResources(config);
@@ -234,15 +237,15 @@ public class IDSService {
 		return Future.succeededFuture(new ArrayList<>());
 	}
 
-	private Future<List<Resource>> getOfferResources(JsonObject config, List<DataAsset> publishedDataAssets, Map<Long, ConnectorEndpoint> endpointMap) {
+	private Future<List<Resource>> getOfferResources(JsonObject config, List<Dataset> publishedDataAssets, Map<Long, List<ConnectorEndpoint>> endpointMap) {
 		Promise<List<Resource>> daPromise = Promise.promise();
 		createDataResources(config, publishedDataAssets, daPromise, endpointMap);
 		return daPromise.future();
 	}
 
-	private void createDataResources( JsonObject config, List<DataAsset> daList, Promise<List<Resource>> daPromise, Map<Long, ConnectorEndpoint> endpointMap) {
+	private void createDataResources( JsonObject config, List<Dataset> daList, Promise<List<Resource>> daPromise, Map<Long, List<ConnectorEndpoint>> endpointMap) {
 			ArrayList<Resource> offerResources = new ArrayList<>();
-			for (DataAsset da : daList) {
+			for (Dataset da : daList) {
 				try {
 					DataResourceBuilder r = new DataResourceBuilder(new URI(config.getString("url") + "/DataResource/"+da.getId()))
 							//						//TODO: The regular period with which items are added to a collection.
@@ -284,20 +287,20 @@ public class IDSService {
 							//._publisher_(null)
 							//._sovereign_(null);
 							._version_(da.getVersion())
-							._resourceEndpoint_(new ArrayList(Arrays.asList(endpointMap.get(da.getId()))));
+							._resourceEndpoint_(new ArrayList(endpointMap.get(da.getId())));
 
-					if (da.getDatasetTitle() != null) {
-						r._title_(new ArrayList<>(Arrays.asList(new TypedLiteral(da.getDatasetTitle()))));
+					if (da.getTitle() != null) {
+						r._title_(new ArrayList<>(Arrays.asList(new TypedLiteral(da.getTitle()))));
 					}
-					if (da.getDataSetDescription() != null && !da.getDataSetDescription().isEmpty()) {
-						r._description_(new ArrayList<>(Arrays.asList(new TypedLiteral(da.getDataSetDescription()))));
+					if (da.getDescription() != null && !da.getDescription().isEmpty()) {
+						r._description_(new ArrayList<>(Arrays.asList(new TypedLiteral(da.getDescription()))));
 					}
 					ArrayList<TypedLiteral> keywords = getKeyWords(da);
 					if (keywords != null) {
-						r._keyword_(getKeyWords(da));
+						r._keyword_(keywords);
 					}
-					if (da.getLicenseUrl() != null) {
-						r._customLicense_(new URI(da.getLicenseUrl()));
+					if (da.getLicense() != null) {
+						r._customLicense_(new URI(da.getLicense()));
 					}
 
 					offerResources.add(r.build());
@@ -308,15 +311,15 @@ public class IDSService {
 			daPromise.complete(offerResources);
 	}
 
-	private void findPublished(Handler<AsyncResult<List<DataAsset>>> next) {
+	private void findPublished(Handler<AsyncResult<List<Dataset>>> next) {
 
 		dataAssetManager.findPublished(reply -> {
 			if(reply.succeeded()) {
 
 				JsonArray array = new JsonArray(reply.result().toString());
-				List<DataAsset> assets = new ArrayList<>();
+				List<Dataset> assets = new ArrayList<>();
 				for(int i=0;i<array.size();i++){
-					assets.add(Json.decodeValue(array.getJsonObject(i).toString(), DataAsset.class));
+					assets.add(Json.decodeValue(array.getJsonObject(i).toString(), Dataset.class));
 				}
 				next.handle(Future.succeededFuture(assets));
 			}
@@ -327,22 +330,30 @@ public class IDSService {
 		});
 	}
 
-	private HashMap<Long, ConnectorEndpoint> getResourceEndpoints(JsonObject config, List<DataAsset> daList) {
-		HashMap<Long, ConnectorEndpoint> endpoints = new HashMap<>();
-		for(DataAsset da : daList) {
-			try {
-				ConnectorEndpoint e = new ConnectorEndpointBuilder(new URI(config.getString("url") + "/ConnectorEndpoint/" + UUID.randomUUID()))
-						._endpointArtifact_(new ArtifactBuilder(new URI(config.getString("url") + "/Artifact/" + da.getId()))
-								._creationDate_(getDate(da.getCreatedAt()))
-								._fileName_(da.getFilename())
-								.build())
-						._accessURL_(new URI(config.getString("url") + "/data/" + da.getId().toString()))
-						._endpointInformation_(new ArrayList<>(Arrays.asList(new TypedLiteral("The file "+da.getFilename()+" can be obtained from this endpoint via GET request."))))
-						.build();
-				endpoints.put(da.getId(),e);
-			} catch (Exception e1) {
-				LOGGER.error(e1);
+	private HashMap<Long, List<ConnectorEndpoint>> getResourceEndpoints(JsonObject config, List<Dataset> daList) {
+		HashMap<Long, List<ConnectorEndpoint>> endpoints = new HashMap<>();
+		for(Dataset da : daList) {
+			List<ConnectorEndpoint> daEndpoints = new ArrayList<>();
+			for(Distribution dist : da.getDistributions()) {
+				try {
+					ConnectorEndpoint e = new ConnectorEndpointBuilder(new URI(config.getString("url") + "/ConnectorEndpoint/" + UUID.randomUUID()))
+							._endpointArtifact_(new ArtifactBuilder(new URI(config.getString("url") + "/Artifact/" + dist.getId()))
+									._creationDate_(getDate(dist.getCreatedAt()))
+									._fileName_(dist.getFilename())
+									.build())
+							._accessURL_(new URI(config.getString("url") + "/data/" + dist.getId().toString()))
+							._endpointInformation_(new ArrayList<>(Arrays.asList(new TypedLiteral("The file " + dist.getFilename() + " can be obtained from this endpoint via GET request."))))
+							.build();
+					e.setProperty(DCTERMS.TITLE.toString(), dist.getTitle());
+					e.setProperty(DCTERMS.DESCRIPTION.toString(), dist.getDescription());
+					e.setProperty(DCTERMS.FORMAT.toString(), dist.getFiletype());
+					e.setProperty(DCTERMS.LICENSE.toString(), dist.getLicense());
+					daEndpoints.add(e);
+				} catch (Exception e1) {
+					LOGGER.error(e1);
+				}
 			}
+			endpoints.put(da.getId(), daEndpoints);
 		}
 		return endpoints;
 	}
@@ -390,7 +401,7 @@ public class IDSService {
 		return null;
 	}
 
-	private ArrayList<TypedLiteral> getKeyWords(DataAsset da) {
+	private ArrayList<TypedLiteral> getKeyWords(Dataset da) {
 		ArrayList<TypedLiteral> keywords = new ArrayList<>();
 		for (String tag : da.getTags()) {
 			if(!tag.isEmpty()) {
@@ -484,9 +495,9 @@ public class IDSService {
 	}
 
 	public void getFileName(Long id, Handler<AsyncResult<String>> result){
-		dataAssetManager.findById(id,jsonObjectAsyncResult -> {
+		dataAssetManager.findDistributionById(id,jsonObjectAsyncResult -> {
 			if (jsonObjectAsyncResult.succeeded()){
-				DataAsset dataAsset = Json.decodeValue(jsonObjectAsyncResult.result().toString(), DataAsset.class);
+				Distribution dataAsset = Json.decodeValue(jsonObjectAsyncResult.result().toString(), Distribution.class);
 				result.handle(Future.succeededFuture(dataAsset.getFilename()));
 			}
 			else {
