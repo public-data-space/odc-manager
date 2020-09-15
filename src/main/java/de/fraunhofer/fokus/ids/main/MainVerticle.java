@@ -349,7 +349,7 @@ public class MainVerticle extends AbstractVerticle{
 		    if (stringAsyncResult.succeeded()){
                 if(result.succeeded()){
                     if(result.result() != null) {
-                        response.putHeader(HttpHeaders.CONTENT_DISPOSITION,"attachment; filename="+stringAsyncResult.result());
+                        response.putHeader(HttpHeaders.CONTENT_DISPOSITION,"attachment; filename=\""+stringAsyncResult.result()+"\"");
                         response.sendFile(result.result().toString());
                         new File(result.result().toString()).delete();
                     } else {
