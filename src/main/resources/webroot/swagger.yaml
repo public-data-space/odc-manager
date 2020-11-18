@@ -928,9 +928,9 @@ components:
       type: object
       properties:
         header:
-          type: string
+          type: object
         payload:
-          type: string
+          type: object
     StatusMessage:
       type: object
       properties:
@@ -960,7 +960,7 @@ components:
         updated_at:
           type: string
         data:
-          type: string
+          type: object
         status:
           type: integer
           format: int64
@@ -1041,7 +1041,7 @@ components:
           type: integer
           format: int64
         data:
-          type: string
+          type: object
         datasourcetype:
           type: string
         licenseurl:
@@ -1056,7 +1056,7 @@ components:
         datasourcename:
           type: string
         data:
-          type: string
+          type: object
     DataSource:
       type: object
       properties:
@@ -1070,7 +1070,7 @@ components:
         datasourcename:
           type: string
         data:
-          type: string
+          type: object
         datasourcetype:
           type: string
     Broker:
@@ -1125,6 +1125,7 @@ components:
       description: Interaction failed due to authentification problems.
   securitySchemes:
     bearerAuth:
+      description: JWT Authentification Token to access the API
       type: http
       scheme: bearer
       bearerFormat: JWT

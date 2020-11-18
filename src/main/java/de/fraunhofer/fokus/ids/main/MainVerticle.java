@@ -282,7 +282,7 @@ public class MainVerticle extends AbstractVerticle{
 						});
 						router.route().handler(CorsHandler.create("*").allowedHeaders(allowedHeaders).allowedMethods(allowedMethods));
 						router.route().handler(BodyHandler.create());
-						router.route("/openapi*").handler(StaticHandler.create());
+						router.route("/api*").handler(StaticHandler.create());
 
 						HttpServer server = vertx.createHttpServer();
 						server.requestHandler(router).listen(this.servicePort);
