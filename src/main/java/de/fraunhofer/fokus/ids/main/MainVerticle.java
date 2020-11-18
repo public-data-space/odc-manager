@@ -30,10 +30,11 @@ import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
 import io.vertx.ext.web.Router;
 import io.vertx.ext.web.RoutingContext;
+import io.vertx.ext.web.api.contract.openapi3.OpenAPI3RouterFactory;
 import io.vertx.ext.web.handler.BodyHandler;
 import io.vertx.ext.web.handler.CorsHandler;
 import io.vertx.ext.web.handler.JWTAuthHandler;
-import org.apache.commons.io.IOUtils;
+import io.vertx.ext.web.handler.StaticHandler;
 import org.apache.http.Header;
 import org.apache.http.HttpEntity;
 import org.apache.http.entity.ContentType;
@@ -46,7 +47,6 @@ import java.util.*;
  */
 public class MainVerticle extends AbstractVerticle{
 	private Logger LOGGER = LoggerFactory.getLogger(MainVerticle.class.getName());
-	private Router router;
 	private AuthManager authManager;
 	private ConnectorController connectorController;
 	private DataAssetController dataAssetController;
@@ -123,7 +123,6 @@ public class MainVerticle extends AbstractVerticle{
 						InitService initService = new InitService(vertx);
 						initService.initDatabase(reply -> {
 							if(reply.succeeded()){
-								router = Router.router(vertx);
 								createHttpServer(vertx);
 								startPromise.complete();
 							}
@@ -141,170 +140,158 @@ public class MainVerticle extends AbstractVerticle{
 	}
 
 	private void createHttpServer(Vertx vertx) {
-		HttpServer server = vertx.createHttpServer();
 
-		Set<String> allowedHeaders = new HashSet<>();
-		allowedHeaders.add("x-requested-with");
-		allowedHeaders.add("Access-Control-Allow-Origin");
-		allowedHeaders.add("Access-Control-Allow-Credentials");
-		allowedHeaders.add("origin");
-		allowedHeaders.add("authorization");
-		allowedHeaders.add("Content-Type");
-		allowedHeaders.add("accept");
-		allowedHeaders.add("Access-Control-Allow-Headers");
-		allowedHeaders.add("Access-Control-Allow-Methods");
-		allowedHeaders.add("X-PINGARUNER");
+		OpenAPI3RouterFactory.create(vertx, "/webroot/swagger.yaml", ar -> {
+					if (ar.succeeded()) {
+						OpenAPI3RouterFactory routerFactory = ar.result();
 
-		Set<HttpMethod> allowedMethods = new HashSet<>();
-		allowedMethods.add(HttpMethod.GET);
-		allowedMethods.add(HttpMethod.POST);
-		allowedMethods.add(HttpMethod.OPTIONS);
+						routerFactory.addSecurityHandler("bearerAuth", JWTAuthHandler.create(authManager.getProvider()));
 
-		router.route().handler(CorsHandler.create("*").allowedHeaders(allowedHeaders).allowedMethods(allowedMethods));
-		router.route().handler(BodyHandler.create());
+						routerFactory
+								.addHandlerByOperationId("loginId",routingContext ->
+										authManager.login(routingContext.getBodyAsJson(), reply -> {
+											if(reply.succeeded()) {
+												if (reply.result() != null) {
+													routingContext.response().end(reply.result());
+												} else {
+													routingContext.fail(401);
+												}
+											}
+											else{
+												routingContext.response().setStatusCode(500).end();
+											}
+										})
+								)
+								.addHandlerByOperationId("aboutPostId",routingContext ->
+										connectorController.checkMessage(IDSMessageParser.parse(routingContext.request().formAttributes()), DescriptionRequestMessage.class, result ->
+										replyMessage(result, routingContext.response())))
+								.addHandlerByOperationId("aboutGetId",routingContext ->
+										connectorController.about(result ->
+										reply(result, routingContext.response())))
+								.addHandlerByOperationId("dataPostId",routingContext ->
+										connectorController.checkMessage(IDSMessageParser.parse(routingContext.request().formAttributes()), ArtifactRequestMessage.class, result ->
+										replyMessage(result, routingContext.response())))
+								.addHandlerByOperationId("dataGetId",routingContext ->
+										connectorController.payload(Long.parseLong(routingContext.request().getParam("id")), "", result ->
+										replyFile(result,Long.parseLong(routingContext.request().getParam("id")), routingContext.response())))
+								.addHandlerByOperationId("infrastructureId",routingContext ->
+										connectorController.routeMessage(IDSMessageParser.parse(routingContext.request().formAttributes()), result ->
+										replyMessage(result, routingContext.response())))
 
-		router.post("/login").handler(routingContext ->
-				authManager.login(routingContext.getBodyAsJson(), reply -> {
-					if(reply.succeeded()) {
-						if (reply.result() != null) {
-							routingContext.response().end(reply.result());
-						} else {
-							routingContext.fail(401);
-						}
+								// Jobs
+
+								.addHandlerByOperationId("jobGetId",routingContext ->
+										jobController.findAll(result -> reply(result, routingContext.response())))
+								.addHandlerByOperationId("jobDeleteId",routingContext ->
+										jobController.deleteAll(result -> reply(result, routingContext.response())))
+
+								// Data Assets
+
+								.addHandlerByOperationId("getCountsId",routingContext ->
+										dataAssetController.counts(result -> reply(result, routingContext.response())))
+								.addHandlerByOperationId("publishAllDataAssetsId",routingContext ->
+										dataAssetController.publishAll(result -> reply(result, routingContext.response())))
+								.addHandlerByOperationId("unpublishAllDataAssetsId",routingContext ->
+										dataAssetController.unpublishAll(result -> reply(result, routingContext.response())))
+								.addHandlerByOperationId("publishDataAssetId",routingContext ->
+										dataAssetController.publish(Long.parseLong(routingContext.request().getParam("id")), result -> reply(result, routingContext.response())))
+								.addHandlerByOperationId("unpublishDataAssetId",routingContext ->
+										dataAssetController.unPublish(Long.parseLong(routingContext.request().getParam("id")), result -> reply(result, routingContext.response())))
+								.addHandlerByOperationId("deleteDataAssetId",routingContext ->
+										dataAssetController.delete(Long.parseLong(routingContext.request().getParam("id")), result -> reply(result, routingContext.response())))
+								.addHandlerByOperationId("getDataAssetsId",routingContext ->
+										dataAssetController.index(result -> reply(result, routingContext.response())))
+								.addHandlerByOperationId("addDataAssetId",routingContext ->
+										processDataAssetInformation(routingContext))
+
+								// Data Sources
+
+								.addHandlerByOperationId("dataSourceAddId",routingContext ->
+										dataSourceController.add(toDataSource(routingContext.getBodyAsJson()), result -> reply(result, routingContext.response())))
+								.addHandlerByOperationId("dataSourceDeleteId",routingContext ->
+										dataSourceController.delete(Long.parseLong(routingContext.request().getParam("id")), result -> reply(result, routingContext.response())))
+								.addHandlerByOperationId("allDataSourceGetId",routingContext ->
+										dataSourceController.findAllByType(result -> reply(result, routingContext.response())))
+								.addHandlerByOperationId("datasourceGetId",routingContext ->
+										dataSourceController.findById(Long.parseLong(routingContext.request().getParam("id")), result -> reply(result, routingContext.response())))
+								.addHandlerByOperationId("dataSourceTypeGetId",routingContext ->
+										dataSourceController.findByType(routingContext.request().getParam("type"), result -> reply(result, routingContext.response())))
+								.addHandlerByOperationId("dataSourceEditId",routingContext ->
+										dataSourceController.update(toDataSource(routingContext.getBodyAsJson()),Long.parseLong(routingContext.request().getParam("id")), result -> reply(result, routingContext.response())))
+								.addHandlerByOperationId("dataSourceSchemaGetId",routingContext ->
+										dataSourceController.getFormSchema(routingContext.request().getParam("type"), result -> reply(result, routingContext.response())))
+
+								// Broker
+
+								.addHandlerByOperationId("brokerAddId",routingContext ->
+										brokerController.add(routingContext.getBodyAsJson().getString("url"), result -> reply(result, routingContext.response())))
+								.addHandlerByOperationId("brokerUnregisterId",routingContext ->
+										brokerController.unregister(Long.parseLong(routingContext.request().getParam("id")), result -> reply(result, routingContext.response())))
+								.addHandlerByOperationId("brokerRegisterId",routingContext ->
+										brokerController.register(Long.parseLong(routingContext.request().getParam("id")), result -> reply(result, routingContext.response())))
+								.addHandlerByOperationId("brokerGetId",routingContext ->
+										brokerManager.findAll(result -> reply(result, routingContext.response())))
+								.addHandlerByOperationId("brokerDeleteId",routingContext ->
+										brokerController.delete(Long.parseLong(routingContext.request().getParam("id")), result -> reply(result, routingContext.response())))
+
+								// Config
+
+								.addHandlerByOperationId("configGetId",routingContext ->
+										configService.getConfiguration(result -> reply(result, routingContext.response())))
+								.addHandlerByOperationId("configEditId",routingContext ->
+										configService.editConfiguration(routingContext.getBodyAsJson(), result -> reply(result, routingContext.response())))
+
+								// Upload
+
+								.addHandlerByOperationId("fileAddId",routingContext ->
+										fileUploadController.uploadFile(routingContext, result -> reply(result, routingContext.response())))
+
+								// Adapters
+
+								.addHandlerByOperationId("adapterGetId",routingContext ->
+										dataSourceController.listAdapters(result -> reply(result, routingContext.response())))
+								.addHandlerByOperationId("imagesGetId",routingContext ->
+										dockerController.getImages(result -> reply(result, routingContext.response())))
+								.addHandlerByOperationId("adapterStartId",routingContext ->
+										dockerController.startImages(routingContext.getBodyAsString(), reply -> reply(reply, routingContext.response())))
+								.addHandlerByOperationId("adapterStopId",routingContext ->
+										dockerController.stopImages(routingContext.getBodyAsString(), reply -> reply(reply, routingContext.response())))
+						;
+
+						Set<String> allowedHeaders = new HashSet<>();
+						allowedHeaders.add("x-requested-with");
+						allowedHeaders.add("Access-Control-Allow-Origin");
+						allowedHeaders.add("Access-Control-Allow-Credentials");
+						allowedHeaders.add("origin");
+						allowedHeaders.add("authorization");
+						allowedHeaders.add("Content-Type");
+						allowedHeaders.add("accept");
+						allowedHeaders.add("Access-Control-Allow-Headers");
+						allowedHeaders.add("Access-Control-Allow-Methods");
+						allowedHeaders.add("X-PINGARUNER");
+
+						Set<HttpMethod> allowedMethods = new HashSet<>();
+						allowedMethods.add(HttpMethod.GET);
+						allowedMethods.add(HttpMethod.POST);
+						allowedMethods.add(HttpMethod.OPTIONS);
+
+						Router router = routerFactory.getRouter();
+						router.route("/").handler(routingContext -> {
+							connectorController.about(result ->
+									reply(result, routingContext.response()));
+						});
+						router.route().handler(CorsHandler.create("*").allowedHeaders(allowedHeaders).allowedMethods(allowedMethods));
+						router.route().handler(BodyHandler.create());
+						router.route("/openapi*").handler(StaticHandler.create());
+
+						HttpServer server = vertx.createHttpServer();
+						server.requestHandler(router).listen(this.servicePort);
+						LOGGER.info("odc-manager deployed on port "+servicePort);
+
+					} else {
+						LOGGER.error(ar.cause());
 					}
-					else{
-						routingContext.response().setStatusCode(404).end();
-					}
-				})
-		);
-
-		router.get("/about").handler(routingContext ->
-				connectorController.about(result ->
-						reply(result, routingContext.response())));
-
-		router.post("/about")
-				.handler(routingContext ->
-				connectorController.checkMessage(IDSMessageParser.parse(routingContext.request().formAttributes()), DescriptionRequestMessage.class, result ->
-						replyMessage(result, routingContext.response())));
-
-		router.post("/infrastructure")
-				.handler(routingContext -> {
-				connectorController.routeMessage(IDSMessageParser.parse(routingContext.request().formAttributes()), result ->
-						replyMessage(result, routingContext.response()));});
-
-
-		router.get("/data/:id.:extension").handler(routingContext ->
-				connectorController.payload(Long.parseLong(routingContext.request().getParam("id")), routingContext.request().getParam("extension"), result ->
-						replyFile(result,Long.parseLong(routingContext.request().getParam("id")), routingContext.response())));
-
-		router.get("/data/:id").handler(routingContext ->
-				connectorController.payload(Long.parseLong(routingContext.request().getParam("id")), "", result ->
-						replyFile(result,Long.parseLong(routingContext.request().getParam("id")), routingContext.response())));
-
-		router.post("/data")
-				.handler(routingContext ->
-				connectorController.checkMessage(IDSMessageParser.parse(routingContext.request().formAttributes()), ArtifactRequestMessage.class, result ->
-						replyMessage(result, routingContext.response())));
-
-		router.route("/api/*").handler(JWTAuthHandler.create(authManager.getProvider()));
-
-		router.route("/api/jobs/find/all").handler(routingContext ->
-				jobController.findAll(result -> reply(result, routingContext.response())));
-
-		router.route("/api/jobs/delete/all").handler(routingContext ->
-				jobController.deleteAll(result -> reply(result, routingContext.response())));
-
-		router.route("/api/dataassets/all/publish").handler(routingContext ->
-				dataAssetController.publishAll(result -> reply(result, routingContext.response())));
-
-		router.route("/api/dataassets/all/unpublish").handler(routingContext ->
-				dataAssetController.unpublishAll(result -> reply(result, routingContext.response())));
-
-		router.route("/api/dataassets/:id/publish").handler(routingContext ->
-				dataAssetController.publish(Long.parseLong(routingContext.request().getParam("id")), result -> reply(result, routingContext.response())));
-
-		router.route("/api/dataassets/:id/unpublish").handler(routingContext ->
-				dataAssetController.unPublish(Long.parseLong(routingContext.request().getParam("id")), result -> reply(result, routingContext.response())));
-
-		router.route("/api/dataassets/:id/delete").handler(routingContext ->
-				dataAssetController.delete(Long.parseLong(routingContext.request().getParam("id")), result -> reply(result, routingContext.response())));
-
-		router.route("/api/dataassets").handler(routingContext ->
-				dataAssetController.index(result -> reply(result, routingContext.response())));
-
-		router.route("/api/dataassets/counts").handler(routingContext ->
-				dataAssetController.counts(result -> reply(result, routingContext.response())));
-
-
-//		router.route("/dataassets/resource/:name").handler(routingContext ->
-//				dataAssetController.resource("",result -> reply(result, routingContext.response())));
-
-		router.post("/api/dataassets/add").handler(routingContext ->
-						processDataAssetInformation(routingContext));
-
-//		router.route("/uri/:name").handler(routingContext ->
-//						getUri(result -> reply(result, routingContext.response()), routingContext)
-//				);
-
-		router.post("/api/datasources/add").handler(routingContext ->
-				dataSourceController.add(toDataSource(routingContext.getBodyAsJson()), result -> reply(result, routingContext.response())));
-
-		router.route("/api/datasources/delete/:id").handler(routingContext ->
-				dataSourceController.delete(Long.parseLong(routingContext.request().getParam("id")), result -> reply(result, routingContext.response())));
-
-		router.route("/api/datasources/findAll").handler(routingContext ->
-				dataSourceController.findAllByType(result -> reply(result, routingContext.response())));
-
-		router.route("/api/datasources/find/id/:id").handler(routingContext ->
-				dataSourceController.findById(Long.parseLong(routingContext.request().getParam("id")), result -> reply(result, routingContext.response())));
-
-		router.route("/api/datasources/find/type/:type").handler(routingContext ->
-				dataSourceController.findByType(routingContext.request().getParam("type"), result -> reply(result, routingContext.response())));
-
-		router.post("/api/datasources/edit/:id").handler(routingContext ->
-				dataSourceController.update(toDataSource(routingContext.getBodyAsJson()),Long.parseLong(routingContext.request().getParam("id")), result -> reply(result, routingContext.response())));
-
-		router.route("/api/datasources/schema/type/:type").handler(routingContext ->
-				dataSourceController.getFormSchema(routingContext.request().getParam("type"), result -> reply(result, routingContext.response())));
-
-		router.route("/api/datasources/schema/type/:type").handler(routingContext ->
-				dataSourceController.getFormSchema(routingContext.request().getParam("type"), result -> reply(result, routingContext.response())));
-
-		router.post("/api/broker/add").handler(routingContext ->
-				brokerController.add(routingContext.getBodyAsJson().getString("url"), result -> reply(result, routingContext.response())));
-
-		router.route("/api/broker/unregister/:id").handler(routingContext ->
-				brokerController.unregister(Long.parseLong(routingContext.request().getParam("id")), result -> reply(result, routingContext.response())));
-
-		router.route("/api/broker/register/:id").handler(routingContext ->
-				brokerController.register(Long.parseLong(routingContext.request().getParam("id")), result -> reply(result, routingContext.response())));
-
-		router.route("/api/broker/findAll").handler(routingContext ->
-				brokerManager.findAll(result -> reply(result, routingContext.response())));
-
-		router.route("/api/broker/delete/:id").handler(routingContext ->
-				brokerController.delete(Long.parseLong(routingContext.request().getParam("id")), result -> reply(result, routingContext.response())));
-
-		router.route("/api/configuration/get").handler(routingContext ->
-				configService.getConfiguration(result -> reply(result, routingContext.response())));
-
-		router.post("/api/configuration/edit").handler(routingContext ->
-				configService.editConfiguration(routingContext.getBodyAsJson(), result -> reply(result, routingContext.response())));
-
-		router.post("/api/upload/file").handler(routingContext ->
-				fileUploadController.uploadFile(routingContext, result -> reply(result, routingContext.response())));
-
-		router.route("/api/listAdapters").handler(routingContext->
-				dataSourceController.listAdapters(result -> reply(result, routingContext.response())));
-
-		router.route("/api/images").handler(routingContext->
-				dockerController.getImages(result -> reply(result, routingContext.response())));
-
-		router.post("/api/images/start").handler(routingContext ->  dockerController.startImages(routingContext.getBodyAsString(), reply -> reply(reply, routingContext.response())));
-		router.post("/api/images/stop").handler(routingContext ->  dockerController.stopImages(routingContext.getBodyAsString(), reply -> reply(reply, routingContext.response())));
-
-		server.requestHandler(router).listen(servicePort);
-		LOGGER.info("odc-manager deployed on port "+servicePort);
+				});
 	}
 
 	private void processDataAssetInformation(RoutingContext routingContext){
@@ -331,7 +318,7 @@ public class MainVerticle extends AbstractVerticle{
 			response.putHeader("content-type", ContentType.APPLICATION_JSON.toString());
 			response.end(entity);
 		} else {
-			response.setStatusCode(404).end();
+			response.setStatusCode(500).end();
 		}
 	}
 	private void reply(AsyncResult result, HttpServerResponse response){
@@ -340,7 +327,7 @@ public class MainVerticle extends AbstractVerticle{
 		}
 		else{
 			LOGGER.error("Result Future failed.",result.cause());
-			response.setStatusCode(404).end();
+			response.setStatusCode(500).end();
 		}
 	}
 
@@ -354,17 +341,17 @@ public class MainVerticle extends AbstractVerticle{
                         new File(result.result().toString()).delete();
                     } else {
 						LOGGER.error("Dataset not found! ",stringAsyncResult.cause());
-						response.setStatusCode(404).end();
+						response.setStatusCode(500).end();
 					}
                 }
                 else{
                     LOGGER.error("Result Future failed.",result.cause());
-                    response.setStatusCode(404).end();
+                    response.setStatusCode(500).end();
                 }
             }
 		    else {
                 LOGGER.error("Filename not found! ",stringAsyncResult.cause());
-                response.setStatusCode(404).end();
+                response.setStatusCode(500).end();
             }
         });
 
@@ -387,7 +374,7 @@ public class MainVerticle extends AbstractVerticle{
 		}
 		else{
 			LOGGER.error("Result Future failed.",result.cause());
-			response.setStatusCode(404).end();
+			response.setStatusCode(500).end();
 		}
 	}
 
