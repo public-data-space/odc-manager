@@ -1,8 +1,10 @@
 package de.fraunhofer.fokus.ids.services;
 
+import de.fraunhofer.fokus.ids.models.Constants;
 import de.fraunhofer.fokus.ids.persistence.entities.Dataset;
 import de.fraunhofer.fokus.ids.persistence.entities.Distribution;
 import de.fraunhofer.fokus.ids.persistence.managers.DataAssetManager;
+import de.fraunhofer.fokus.ids.utils.services.authService.AuthAdapterService;
 import de.fraunhofer.iais.eis.*;
 import de.fraunhofer.iais.eis.ids.jsonld.Serializer;
 import de.fraunhofer.iais.eis.util.TypedLiteral;
@@ -41,35 +43,49 @@ public class IDSService {
 	private DataAssetManager dataAssetManager;
 	private ConfigService configService;
     private Serializer serializer = new Serializer();
+	private AuthAdapterService authAdapterService;
+
 	public IDSService(Vertx vertx){
 		dataAssetManager = new DataAssetManager();
 		configService = new ConfigService(vertx);
+		this.authAdapterService = AuthAdapterService.createProxy(vertx, Constants.AUTHADAPTER_SERVICE);
+
 	}
 
 	public void getSelfDescriptionResponse(JsonObject config, URI uri, Handler<AsyncResult<Message>> resultHandler) {
-		resultHandler.handle(Future.succeededFuture( buildSelfDescriptionResponse(uri, config)));
+		buildSelfDescriptionResponse(uri, config, resultHandler);
 	}
 
 	public void getArtifactResponse(JsonObject config, URI uri, Handler<AsyncResult<Message>> resultHandler) {
-		resultHandler.handle(Future.succeededFuture( buildArtifactResponseMessage(uri, config)));
+		buildArtifactResponseMessage(uri, config, resultHandler);
 	}
 
-	private ArtifactResponseMessage buildArtifactResponseMessage(URI uri, JsonObject config) {
-		try {
-			return new ArtifactResponseMessageBuilder(new URI(config.getString("url") + "/ArtifactResponseMessage/" +UUID.randomUUID().toString()))
-					._issued_(getDate())
-					._correlationMessage_(uri)
-					._modelVersion_(INFO_MODEL_VERSION)
-					._issuerConnector_(new URI(config.getString("url")+"#Connector"))
-					._securityToken_( new DynamicAttributeTokenBuilder()
-							._tokenFormat_(TokenFormat.JWT)
-							._tokenValue_(config.getString("jwt"))
-							.build())
-					.build();
-		} catch (URISyntaxException e) {
-			LOGGER.error(e);
-		}
-		return null;
+	private void buildArtifactResponseMessage(URI uri, JsonObject config, Handler<AsyncResult<Message>> resultHandler) {
+		getJWT(jwtResult -> {
+			if(jwtResult.succeeded()) {
+				try {
+					ArtifactResponseMessage message = new ArtifactResponseMessageBuilder(new URI(config.getString("url") + "/ArtifactResponseMessage/" + UUID.randomUUID().toString()))
+							._issued_(getDate())
+							._correlationMessage_(uri)
+							._modelVersion_(INFO_MODEL_VERSION)
+							._issuerConnector_(new URI(config.getString("url") + "#Connector"))
+							._securityToken_(new DynamicAttributeTokenBuilder()
+									._tokenFormat_(TokenFormat.JWT)
+									._tokenValue_(jwtResult.result())
+									.build())
+							.build();
+					resultHandler.handle(Future.succeededFuture(message));
+
+				} catch (URISyntaxException e) {
+					LOGGER.error(e);
+					resultHandler.handle(Future.failedFuture(e));
+				}
+			}
+			else {
+				LOGGER.error(jwtResult.cause());
+				resultHandler.handle(Future.failedFuture(jwtResult.cause()));
+			}
+		});
 	}
 
 	private XMLGregorianCalendar getDate(){
@@ -88,14 +104,16 @@ public class IDSService {
 	}
 
 	public void createUpdateMessage(JsonObject config, Handler<AsyncResult<Message>> resultHandler){
+		getJWT(jwtResult -> {
+			if(jwtResult.succeeded()) {
 				try {
 					ConnectorUpdateMessage message = new ConnectorUpdateMessageBuilder()
 							._issued_(getDate())
 							._modelVersion_(INFO_MODEL_VERSION)
-							._issuerConnector_(new URI(config.getString("url")+"#Connector"))
-							._securityToken_( new DynamicAttributeTokenBuilder()
+							._issuerConnector_(new URI(config.getString("url") + "#Connector"))
+							._securityToken_(new DynamicAttributeTokenBuilder()
 									._tokenFormat_(TokenFormat.JWT)
-									._tokenValue_(config.getString("jwt"))
+									._tokenValue_(jwtResult.result())
 									.build())
 							.build();
 					resultHandler.handle(Future.succeededFuture(message));
@@ -103,9 +121,16 @@ public class IDSService {
 					LOGGER.error(e);
 					resultHandler.handle(Future.failedFuture(e));
 				}
+			} else {
+				LOGGER.error(jwtResult.cause());
+				resultHandler.handle(Future.failedFuture(jwtResult.cause()));
+			}
+		});
 	}
 
 	public void createUnregistrationMessage(JsonObject config, Handler<AsyncResult<Message>> resultHandler){
+		getJWT(jwtResult -> {
+			if(jwtResult.succeeded()) {
 				try {
 					ConnectorUnavailableMessage message = new ConnectorUnavailableMessageBuilder()
 							._issued_(getDate())
@@ -113,7 +138,7 @@ public class IDSService {
 							._issuerConnector_(new URI(config.getString("url")+"#Connector"))
 							._securityToken_( new DynamicAttributeTokenBuilder()
 									._tokenFormat_(TokenFormat.JWT)
-									._tokenValue_(config.getString("jwt"))
+									._tokenValue_(jwtResult.result())
 									.build())
 							.build();
 					resultHandler.handle(Future.succeededFuture(message));
@@ -121,6 +146,11 @@ public class IDSService {
 					LOGGER.error(e);
 					resultHandler.handle(Future.failedFuture(e));
 				}
+			} else {
+				LOGGER.error(jwtResult.cause());
+				resultHandler.handle(Future.failedFuture(jwtResult.cause()));
+			}
+		});
 	}
 
 	public void getConnector(JsonObject config, Handler<AsyncResult<Connector>> resultHandler) {
@@ -134,22 +164,30 @@ public class IDSService {
 				});
 	}
 
-	private DescriptionResponseMessage buildSelfDescriptionResponse(URI uri, JsonObject config){
-
-		try {
-			return new DescriptionResponseMessageBuilder(new URI(config.getString("url") +"/DescriptionResponseMessage/"+UUID.randomUUID()))
-					._issued_(getDate())
-					._correlationMessage_(uri)
-					._modelVersion_(INFO_MODEL_VERSION)
-					._issuerConnector_(new URI(config.getString("url")+"#Connector"))
-					._securityToken_( new DynamicAttributeTokenBuilder()
-							._tokenFormat_(TokenFormat.JWT)
-							._tokenValue_(config.getString("jwt"))
-							.build())
-					.build();
-		} catch (URISyntaxException e) {
-			LOGGER.error(e);
-		}
+	private DescriptionResponseMessage buildSelfDescriptionResponse(URI uri, JsonObject config, Handler<AsyncResult<Message>> resultHandler){
+		getJWT(jwtResult -> {
+			if(jwtResult.succeeded()) {
+				try {
+					DescriptionResponseMessage message = new DescriptionResponseMessageBuilder(new URI(config.getString("url") + "/DescriptionResponseMessage/" + UUID.randomUUID()))
+							._issued_(getDate())
+							._correlationMessage_(uri)
+							._modelVersion_(INFO_MODEL_VERSION)
+							._issuerConnector_(new URI(config.getString("url") + "#Connector"))
+							._securityToken_(new DynamicAttributeTokenBuilder()
+									._tokenFormat_(TokenFormat.JWT)
+									._tokenValue_(jwtResult.result())
+									.build())
+							.build();
+					resultHandler.handle(Future.succeededFuture(message));
+				} catch (URISyntaxException e) {
+					LOGGER.error(e);
+					resultHandler.handle(Future.failedFuture(e));
+				}
+			} else {
+				LOGGER.error(jwtResult.cause());
+				resultHandler.handle(Future.failedFuture(jwtResult.cause()));
+			}
+		});
 		return null;
 	}
 
@@ -409,23 +447,30 @@ public class IDSService {
 	}
 
 	private void createRejectionMessage(JsonObject config, URI uri,RejectionReason rejectionReason,Handler<AsyncResult<RejectionMessage>> resultHandler) {
-				try {
-					RejectionMessage message = new RejectionMessageBuilder(new URI(config.getString("url") + "/RejectionMessage/" + UUID.randomUUID()))
-							._correlationMessage_(uri)
-							._issued_(getDate())
-							._modelVersion_(INFO_MODEL_VERSION)
-							._issuerConnector_(new URI(config.getString("url")+"#Connector"))
-							._securityToken_(new DynamicAttributeTokenBuilder()
-									._tokenFormat_(TokenFormat.JWT)
-									._tokenValue_(config.getString("jwt"))
-									.build())
-							._rejectionReason_(rejectionReason)
-							.build();
-					resultHandler.handle(Future.succeededFuture(message));
-				} catch (URISyntaxException e) {
-					LOGGER.error(e);
-					resultHandler.handle(Future.failedFuture(e));
-				}
+					getJWT(jwtReply -> {
+						if (jwtReply.succeeded()) {
+							try {
+								RejectionMessage message = new RejectionMessageBuilder(new URI(config.getString("url") + "/RejectionMessage/" + UUID.randomUUID()))
+									._correlationMessage_(uri)
+									._issued_(getDate())
+									._modelVersion_(INFO_MODEL_VERSION)
+									._issuerConnector_(new URI(config.getString("url") + "#Connector"))
+									._securityToken_(new DynamicAttributeTokenBuilder()
+											._tokenFormat_(TokenFormat.JWT)
+											._tokenValue_(jwtReply.result())
+											.build())
+									._rejectionReason_(rejectionReason)
+									.build();
+								resultHandler.handle(Future.succeededFuture(message));
+							} catch(URISyntaxException e){
+								LOGGER.error(e);
+								resultHandler.handle(Future.failedFuture(e));
+							}
+					} else {
+						LOGGER.error(jwtReply.cause());
+						resultHandler.handle(Future.failedFuture(jwtReply.cause()));
+					}
+				});
 	}
 
 	public void handleDataMessage(URI uri, Future<Message> header, Future payload, long assetId, Handler<AsyncResult<HttpEntity>> resultHandler) {
@@ -505,7 +550,7 @@ public class IDSService {
 	}
 
 	public void handleRejectionMessage(URI uri,RejectionReason rejectionReason,Handler<AsyncResult<HttpEntity>> resultHandler) {
-		configService.getConfigurationWithDAT(configReply -> {
+		configService.getConfiguration(configReply -> {
 			if(configReply.succeeded()) {
 				createRejectionMessage(configReply.result(),uri, rejectionReason, rejectionMessageAsyncResult -> {
 					if (rejectionMessageAsyncResult.succeeded()) {
@@ -538,4 +583,7 @@ public class IDSService {
 			return multipartEntityBuilder.build();
 	}
 
+	private void getJWT(Handler<AsyncResult<String>> resultHandler){
+		authAdapterService.retrieveToken(tokenReply -> resultHandler.handle(tokenReply));
+	}
 }

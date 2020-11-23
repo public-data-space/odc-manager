@@ -11,7 +11,7 @@ ids-open-data-connector
 * docker
 * docker-compose 3.5 or higher
 * maven
-* DAPS Certificates
+* (DAPS Certificates)
 
 ## Building the Component
 * run ``mvn clean package``

@@ -65,8 +65,7 @@ public class InitService{
 			.put("url","TEXT")
 			.put("maintainer","TEXT")
 			.put("curator","TEXT")
-			.put("title","TEXT")
-			.put("jwt","TEXT");
+			.put("title","TEXT");
 
 	public InitService(Vertx vertx){
 		this.vertx = vertx;

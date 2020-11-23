@@ -1106,8 +1106,6 @@ components:
           type: string
         title:
           type: string
-        jwt:
-          type: string
     Dockerimage:
       type: object
       properties:

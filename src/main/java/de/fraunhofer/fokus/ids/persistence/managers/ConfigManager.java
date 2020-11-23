@@ -39,7 +39,7 @@ public class ConfigManager {
     }
 
     public void edit(Tuple params, Handler<AsyncResult<Void>> resultHandler) {
-        databaseConnector.query("UPDATE configuration SET title = $1, maintainer = $2, curator = $3, url = $4, country = $5, jwt = $6 WHERE id = $7", params, reply -> {
+        databaseConnector.query("UPDATE configuration SET title = $1, maintainer = $2, curator = $3, url = $4, country = $5 WHERE id = $7", params, reply -> {
             if(reply.succeeded()) {
                 resultHandler.handle(Future.succeededFuture());
             } else {
@@ -49,7 +49,7 @@ public class ConfigManager {
 
     }
     public void insert(Tuple params, Handler<AsyncResult<Void>> resultHandler){
-        databaseConnector.query("INSERT INTO configuration (title, maintainer, curator, url, country, jwt) values ($1,$2,$3,$4,$5,$6)", params, reply -> {
+        databaseConnector.query("INSERT INTO configuration (title, maintainer, curator, url, country) values ($1,$2,$3,$4,$5)", params, reply -> {
             if (reply.failed()) {
                 LOGGER.error(reply.cause());
                 resultHandler.handle(Future.failedFuture(reply.cause()));

@@ -63,7 +63,7 @@ public class ConnectorController {
 
 		Promise<Message> artifactResponsePromise = Promise.promise();
 		Future<Message> artifactResponseFuture = artifactResponsePromise.future();
-		configService.getConfigurationWithDAT(reply -> {
+		configService.getConfiguration(reply -> {
 			if(reply.succeeded()) {
 				idsService.getArtifactResponse(reply.result(),header.getId(), artifactResponseFuture);
 			} else {
@@ -111,7 +111,8 @@ public class ConnectorController {
 	public void routeMessage(Optional<IDSMessage> input, Handler<AsyncResult<HttpEntity>> resultHandler) {
 		if (input.isPresent() && input.get().getHeader().isPresent()) {
 			Message header = input.get().getHeader().get();
-			authAdapterService.isAuthenticated(header.getSecurityToken().getTokenValue(), authreply -> {
+			String token = "abc123";
+			authAdapterService.isAuthenticated(header.getSecurityToken() == null?token:header.getSecurityToken().getTokenValue(), authreply -> {
 				if (authreply.succeeded()) {
 					if (header instanceof DescriptionRequestMessage) {
 						multiPartAbout(header, resultHandler);
@@ -142,7 +143,7 @@ public class ConnectorController {
 		Promise<Message> responsePromise = Promise.promise();
 		Future<Message> responseFuture = responsePromise.future();
 
-		configService.getConfigurationWithDAT(reply -> {
+		configService.getConfiguration(reply -> {
 			if(reply.succeeded()) {
 				idsService.getConnector(reply.result(), connectorFuture);
 				idsService.getSelfDescriptionResponse(reply.result(), header.getId(), responseFuture);
@@ -156,7 +157,7 @@ public class ConnectorController {
 	}
 
 	public void about(Handler<AsyncResult<String>> resultHandler) {
-		configService.getConfigurationWithDAT(configReply -> {
+		configService.getConfiguration(configReply -> {
 			if(configReply.succeeded()) {
 				idsService.getConnector(configReply.result(), reply -> {
 					if (reply.succeeded()) {

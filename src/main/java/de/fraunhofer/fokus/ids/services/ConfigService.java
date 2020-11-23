@@ -3,7 +3,6 @@ package de.fraunhofer.fokus.ids.services;
 import de.fraunhofer.fokus.ids.models.Constants;
 import de.fraunhofer.fokus.ids.persistence.managers.ConfigManager;
 import de.fraunhofer.fokus.ids.services.brokerService.BrokerService;
-import de.fraunhofer.fokus.ids.utils.services.authService.AuthAdapterService;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Future;
 import io.vertx.core.Handler;
@@ -20,12 +19,10 @@ public class ConfigService {
     private Logger LOGGER = LoggerFactory.getLogger(ConfigService.class.getName());
     private ConfigManager configManager;
     private BrokerService brokerService;
-    private AuthAdapterService authAdapterService;
 
     public ConfigService(Vertx vertx){
         this.configManager  = new ConfigManager();
         this.brokerService = BrokerService.createProxy(vertx, Constants.BROKER_SERVICE);
-        this.authAdapterService = AuthAdapterService.createProxy(vertx, Constants.AUTHADAPTER_SERVICE);
     }
 
     private void getConfig(Handler<AsyncResult<JsonObject>> resultHandler){
@@ -126,54 +123,4 @@ public class ConfigService {
             }
         });
     }
-
-    public void getConfigurationWithDAT(Handler<AsyncResult<JsonObject>> resultHandler){
-
-        getConfig( reply -> {
-            if(reply.succeeded()){
-                if(!reply.result().getString("jwt").isEmpty()) {
-                    authAdapterService.isAuthenticated(reply.result().getString("jwt"), reply2 -> {
-                        if(reply2.succeeded()){
-                            resultHandler.handle(Future.succeededFuture(reply.result()));
-                        } else {
-                            extendConfig(reply, resultHandler);
-                        }
-                    });
-                } else{
-                    extendConfig(reply, resultHandler);
-                }
-            }
-            else{
-                resultHandler.handle(Future.failedFuture(reply.cause()));
-            }
-        });
-    }
-
-    private void extendConfig(AsyncResult<JsonObject> json, Handler<AsyncResult<JsonObject>> resultHandler){
-        getJWT(jwtReply -> {
-            if (jwtReply.succeeded()) {
-                JsonObject newConfig = json.result().put("jwt", jwtReply.result());
-                resultHandler.handle(Future.succeededFuture(newConfig));
-
-                Tuple params = Tuple.tuple()
-                        .addString(newConfig.getString("title"))
-                        .addString(newConfig.getString("maintainer"))
-                        .addString(newConfig.getString("curator"))
-                        .addString(newConfig.getString("url"))
-                        .addString(newConfig.getString("country"))
-                        .addString((newConfig.getString("jwt")))
-                        .addLong(newConfig.getLong("id"));
-
-                editOnlyLocal(params, r -> {});
-
-            } else {
-                resultHandler.handle(Future.failedFuture("No JWT retrievable."));
-            }
-        });
-    }
-
-    private void getJWT(Handler<AsyncResult<String>> resultHandler){
-        authAdapterService.retrieveToken(tokenReply -> resultHandler.handle(tokenReply));
-    }
-
 }

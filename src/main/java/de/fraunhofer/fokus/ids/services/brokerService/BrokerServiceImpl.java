@@ -72,7 +72,7 @@ public class BrokerServiceImpl implements BrokerService {
     }
 
     private void createAvailableIDSMessages(Promise<Connector> connectorPromise, Promise<Message> messagePromise) {
-        configService.getConfigurationWithDAT(reply -> {
+        configService.getConfiguration(reply -> {
             if(reply.succeeded()) {
                 idsService.getConnector(reply.result(), connectorPromise);
                 idsService.createRegistrationMessage(reply.result(), messagePromise);
@@ -105,7 +105,7 @@ public class BrokerServiceImpl implements BrokerService {
     }
 
     private void createUnavailableIDSMessages(Promise<Connector> connectorPromise, Promise<Message> messagePromise){
-        configService.getConfigurationWithDAT(reply -> {
+        configService.getConfiguration(reply -> {
             if(reply.succeeded()) {
                 idsService.getConnector(reply.result(), connectorPromise);
                 idsService.createUnregistrationMessage(reply.result(), messagePromise);
@@ -128,7 +128,7 @@ public class BrokerServiceImpl implements BrokerService {
     }
 
     private void createUpdateIDSMessages(Promise<Connector> connectorPromise, Promise<Message> messagePromise) {
-        configService.getConfigurationWithDAT(reply -> {
+        configService.getConfiguration(reply -> {
             if(reply.succeeded()) {
                 idsService.getConnector(reply.result(), connectorPromise);
                 idsService.createUpdateMessage(reply.result(), messagePromise);
