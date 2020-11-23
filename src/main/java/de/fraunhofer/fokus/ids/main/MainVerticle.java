@@ -274,6 +274,7 @@ public class MainVerticle extends AbstractVerticle{
 						allowedMethods.add(HttpMethod.GET);
 						allowedMethods.add(HttpMethod.POST);
 						allowedMethods.add(HttpMethod.OPTIONS);
+						allowedMethods.add(HttpMethod.DELETE);
 
 						Router router = routerFactory.getRouter();
 						router.route("/").handler(routingContext -> {
