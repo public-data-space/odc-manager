@@ -39,7 +39,7 @@ public class ConfigManager {
     }
 
     public void edit(Tuple params, Handler<AsyncResult<Void>> resultHandler) {
-        databaseConnector.query("UPDATE configuration SET title = $1, maintainer = $2, curator = $3, url = $4, country = $5 WHERE id = $7", params, reply -> {
+        databaseConnector.query("UPDATE configuration SET title = $1, maintainer = $2, curator = $3, url = $4, country = $5 WHERE id = $6", params, reply -> {
             if(reply.succeeded()) {
                 resultHandler.handle(Future.succeededFuture());
             } else {
