@@ -23,6 +23,7 @@ public class BrokerManager {
     private static final String UNREGISTERBYURL_QUERY =  "Update Broker SET updated_at = NOW(), status = $1  WHERE url = $2";
     private static final String REGISTER_QUERY =  "Update Broker SET updated_at = NOW(), status = $1  WHERE id = $2";
     private static final String FINDALL_QUERY = "SELECT * FROM Broker";
+    private static final String FINDBYSTATUS_QUERY = "SELECT * FROM Broker WHERE status = $1";
     private static final String FINDBYID_QUERY = "SELECT * FROM Broker WHERE id = $1";
     private static final String FINDBYCREATE_QUERY = "SELECT * FROM Broker WHERE created_at = $1";
     private static final String DELETE_QUERY = "DELETE FROM Broker WHERE id = $1";
@@ -105,6 +106,17 @@ public class BrokerManager {
 
     public void findAll(Handler<AsyncResult<JsonArray>> resultHandler){
         databaseConnector.query(FINDALL_QUERY, Tuple.tuple(), reply -> {
+            if (reply.failed()) {
+                LOGGER.error(reply.cause());
+                resultHandler.handle(Future.failedFuture(reply.cause()));
+            } else {
+                resultHandler.handle(Future.succeededFuture(new JsonArray(reply.result())));
+            }
+        });
+    }
+
+    public void findAllRegistered(Handler<AsyncResult<JsonArray>> resultHandler){
+        databaseConnector.query(FINDBYSTATUS_QUERY, Tuple.tuple().addString(BrokerStatus.REGISTERED.toString()), reply -> {
             if (reply.failed()) {
                 LOGGER.error(reply.cause());
                 resultHandler.handle(Future.failedFuture(reply.cause()));

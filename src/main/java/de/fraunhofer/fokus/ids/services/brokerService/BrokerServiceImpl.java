@@ -227,7 +227,7 @@ public class BrokerServiceImpl implements BrokerService {
     }
 
     private void getBrokerURLs(Handler<AsyncResult<List<URL>>> resultHandler){
-        brokerManager.findAll( reply -> {
+        brokerManager.findAllRegistered( reply -> {
             if (reply.succeeded()){
                 List<URL> brokerUrls = new ArrayList<>();
                 for(int i =0;i<reply.result().size();i++) {

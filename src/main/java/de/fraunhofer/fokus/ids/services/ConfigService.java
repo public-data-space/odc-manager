@@ -36,18 +36,13 @@ public class ConfigService {
                 .addString(json.getString("maintainer"))
                 .addString(json.getString("curator"))
                 .addString(json.getString("url"))
-                .addString(json.getString("country"))
-                .addString((json.getString("jwt") == null ? "" : json.getString("jwt")));
+                .addString(json.getString("country"));
 
 
         configManager.get(reply -> {
             if(reply.succeeded()){
                 params.addLong(reply.result().getLong("id"));
-                if(reply.result().getString("jwt") == ""){
-                    editOnlyLocal(params, resultHandler);
-                } else {
-                    editWithBroker(params, resultHandler);
-                }
+                    edit(params, resultHandler);
             } else {
                 insert(params, resultHandler);
             }
@@ -55,7 +50,7 @@ public class ConfigService {
     }
 
 
-    public void editWithBroker(Tuple params, Handler<AsyncResult<JsonObject>> resultHandler){
+    public void edit(Tuple params, Handler<AsyncResult<JsonObject>> resultHandler){
 
         brokerService.unsubscribeAll(unsubReply -> {
             if (unsubReply.succeeded()) {
@@ -87,10 +82,6 @@ public class ConfigService {
                 resultHandler.handle(Future.succeededFuture(jO));
             }
         });
-    }
-
-    public void editOnlyLocal(Tuple params, Handler<AsyncResult<JsonObject>> resultHandler){
-        configManager.edit(params, r -> reply(r, resultHandler));
     }
 
     public void insert(Tuple params, Handler<AsyncResult<JsonObject>> resultHandler){
